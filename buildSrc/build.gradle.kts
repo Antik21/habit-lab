@@ -8,6 +8,7 @@ repositories {
 }
 
 dependencies {
+    testImplementation(gradleTestKit())
     testImplementation(kotlin("test"))
 }
 

@@ -15,6 +15,19 @@ class ArchitectureBoundaryCheckerTest {
     }
 
     @Test
+    fun `reports a source whose package is outside the shared root`() {
+        val source = ArchitectureSource(
+            relativePath = "ExternalPackage.kt",
+            content = "package com.example.feature\n\nclass ExternalPackage",
+        )
+
+        assertEquals(
+            listOf("ExternalPackage.kt: package must be under $sharedRoot"),
+            checker.findViolations(listOf(source)),
+        )
+    }
+
+    @Test
     fun `allows every declared layer dependency`() {
         val sources = listOf(
             layerSource("Core.kt", "core"),
@@ -129,6 +142,33 @@ class ArchitectureBoundaryCheckerTest {
     }
 
     @Test
+    fun `reports same-line root declarations after package and import semicolons`() {
+        val sources = listOf(
+            ArchitectureSource(
+                relativePath = "RootAfterPackage.kt",
+                content = "package $sharedRoot; class RootAfterPackage",
+            ),
+            ArchitectureSource(
+                relativePath = "RootAfterImport.kt",
+                content = "package $sharedRoot; import kotlin.String; class RootAfterImport",
+            ),
+        )
+        val packageAndImportsOnly = ArchitectureSource(
+            relativePath = "RootPackageAndImportsOnly.kt",
+            content = "package $sharedRoot; import kotlin.String; import kotlin.Int;",
+        )
+
+        assertEquals(
+            listOf(
+                "RootAfterImport.kt: shared root package is reserved for package-only files",
+                "RootAfterPackage.kt: shared root package is reserved for package-only files",
+            ),
+            checker.findViolations(sources),
+        )
+        assertEquals(emptyList(), checker.findViolations(listOf(packageAndImportsOnly)))
+    }
+
+    @Test
     fun `reports unqualified DAO and data source names after a wildcard import`() {
         val source = ArchitectureSource(
             relativePath = "PresentationPersistence.kt",
@@ -148,6 +188,153 @@ class ArchitectureBoundaryCheckerTest {
             listOf("PresentationPersistence.kt: presentation must not reference DAO or DataSource types"),
             checker.findViolations(listOf(source)),
         )
+    }
+
+    @Test
+    fun `reports exact Dao and DataSource names`() {
+        val exactDao = source(
+            relativePath = "ExactDao.kt",
+            packageName = "$sharedRoot.presentation",
+            body = "class ExactDao(val dao: Dao)",
+        )
+        val exactDataSource = source(
+            relativePath = "ExactDataSource.kt",
+            packageName = "$sharedRoot.presentation",
+            body = "class ExactDataSource(val dataSource: DataSource)",
+        )
+
+        assertEquals(
+            listOf("ExactDao.kt: presentation must not reference DAO or DataSource types"),
+            checker.findViolations(listOf(exactDao)),
+        )
+        assertEquals(
+            listOf("ExactDataSource.kt: presentation must not reference DAO or DataSource types"),
+            checker.findViolations(listOf(exactDataSource)),
+        )
+    }
+
+    @Test
+    fun `detects forbidden references in normal string templates`() {
+        val templateStart = "\${"
+        val koin = source(
+            relativePath = "NormalTemplateKoin.kt",
+            packageName = "$sharedRoot.app",
+            body = "val koin = \"value: $templateStart org.koin.dsl.module}\"",
+        )
+        val layer = source(
+            relativePath = "NormalTemplateLayer.kt",
+            packageName = "$sharedRoot.presentation",
+            body = "val layer = \"value: $templateStart $sharedRoot.data.Fixture}\"",
+        )
+        val dao = source(
+            relativePath = "NormalTemplateDao.kt",
+            packageName = "$sharedRoot.presentation",
+            body = "val dao = \"value: $templateStart Dao}\"",
+        )
+        val dataSource = source(
+            relativePath = "NormalTemplateDataSource.kt",
+            packageName = "$sharedRoot.presentation",
+            body = "val dataSource = \"value: $templateStart DataSource}\"",
+        )
+
+        assertEquals(
+            listOf("NormalTemplateKoin.kt: org.koin references are only allowed in di"),
+            checker.findViolations(listOf(koin)),
+        )
+        assertEquals(
+            listOf("NormalTemplateLayer.kt: presentation may not depend on shared.data"),
+            checker.findViolations(listOf(layer)),
+        )
+        assertEquals(
+            listOf("NormalTemplateDao.kt: presentation must not reference DAO or DataSource types"),
+            checker.findViolations(listOf(dao)),
+        )
+        assertEquals(
+            listOf("NormalTemplateDataSource.kt: presentation must not reference DAO or DataSource types"),
+            checker.findViolations(listOf(dataSource)),
+        )
+    }
+
+    @Test
+    fun `detects forbidden references in raw string templates`() {
+        val tripleQuote = "\"\"\""
+        val templateStart = "\${"
+        val koin = source(
+            relativePath = "RawTemplateKoin.kt",
+            packageName = "$sharedRoot.app",
+            body = "val koin = $tripleQuote value: $templateStart org.koin.dsl.module} $tripleQuote",
+        )
+        val layer = source(
+            relativePath = "RawTemplateLayer.kt",
+            packageName = "$sharedRoot.presentation",
+            body = "val layer = $tripleQuote value: $templateStart $sharedRoot.data.Fixture} $tripleQuote",
+        )
+        val dao = source(
+            relativePath = "RawTemplateDao.kt",
+            packageName = "$sharedRoot.presentation",
+            body = "val dao = $tripleQuote value: $templateStart Dao} $tripleQuote",
+        )
+        val dataSource = source(
+            relativePath = "RawTemplateDataSource.kt",
+            packageName = "$sharedRoot.presentation",
+            body = "val dataSource = $tripleQuote value: $templateStart DataSource} $tripleQuote",
+        )
+
+        assertEquals(
+            listOf("RawTemplateKoin.kt: org.koin references are only allowed in di"),
+            checker.findViolations(listOf(koin)),
+        )
+        assertEquals(
+            listOf("RawTemplateLayer.kt: presentation may not depend on shared.data"),
+            checker.findViolations(listOf(layer)),
+        )
+        assertEquals(
+            listOf("RawTemplateDao.kt: presentation must not reference DAO or DataSource types"),
+            checker.findViolations(listOf(dao)),
+        )
+        assertEquals(
+            listOf("RawTemplateDataSource.kt: presentation must not reference DAO or DataSource types"),
+            checker.findViolations(listOf(dataSource)),
+        )
+    }
+
+    @Test
+    fun `continues scanning template expressions after nested braces strings and comments`() {
+        val templateStart = "\${"
+        val source = source(
+            relativePath = "NestedTemplateKoin.kt",
+            packageName = "$sharedRoot.app",
+            body = """
+                val template = "value: $templateStart run {
+                    val ignoredString = "org.koin.dsl.module"
+                    // org.koin.dsl.module
+                    /* outer org.koin.dsl.module
+                        /* nested org.koin.dsl.module */
+                    */
+                    if (true) { org.koin.dsl.module }
+                }}"
+            """.trimIndent(),
+        )
+
+        assertEquals(
+            listOf("NestedTemplateKoin.kt: org.koin references are only allowed in di"),
+            checker.findViolations(listOf(source)),
+        )
+    }
+
+    @Test
+    fun `ignores forbidden-looking non-template string text`() {
+        val tripleQuote = "\"\"\""
+        val source = source(
+            relativePath = "NonTemplateStringText.kt",
+            packageName = "$sharedRoot.presentation",
+            body = """
+                val normal = "org.koin.dsl.module $sharedRoot.data.Fixture Dao DataSource"
+                val raw = $tripleQuote org.koin.dsl.module $sharedRoot.data.Fixture Dao DataSource $tripleQuote
+            """.trimIndent(),
+        )
+
+        assertEquals(emptyList(), checker.findViolations(listOf(source)))
     }
 
     @Test

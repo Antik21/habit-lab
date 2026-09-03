@@ -60,7 +60,13 @@ val checkArchitectureBoundaries = tasks.register(
 ) {
     group = "verification"
     description = "Verifies the shared commonMain package dependency boundaries."
-    sourceDirectory.set(layout.projectDirectory.dir("src/commonMain/kotlin"))
+    val commonMainKotlinSources = layout.projectDirectory.dir("src/commonMain/kotlin")
+    sourceDirectory.set(commonMainKotlinSources)
+    sourcePathPrefix.set(
+        commonMainKotlinSources.asFile
+            .relativeTo(project.projectDir)
+            .invariantSeparatorsPath,
+    )
 }
 
 tasks.named("check") {

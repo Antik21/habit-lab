@@ -27,6 +27,11 @@ class ArchitectureBoundaryChecker {
             violations += "${source.relativePath}: org.koin references are only allowed in di"
         }
 
+        if (packageName != sharedRootPackage && !packageName.startsWith("$sharedRootPackage.")) {
+            violations += "${source.relativePath}: package must be under $sharedRootPackage"
+            return violations
+        }
+
         if (packageName == sharedRootPackage) {
             if (hasRootPackageContent(code)) {
                 violations += "${source.relativePath}: shared root package is reserved for package-only files"
@@ -72,6 +77,8 @@ class ArchitectureBoundaryChecker {
         var index = 0
         var state = 0
         var blockCommentDepth = 0
+        val returnStates = ArrayDeque<Int>()
+        val templateBraceDepths = ArrayDeque<Int>()
 
         while (index < source.length) {
             val current = source[index]
@@ -80,27 +87,32 @@ class ArchitectureBoundaryChecker {
                     source.startsWith("//", index) -> {
                         result.append("  ")
                         index += 2
+                        returnStates.addLast(state)
                         state = 1
                     }
                     source.startsWith("/*", index) -> {
                         result.append("  ")
                         index += 2
                         blockCommentDepth = 1
+                        returnStates.addLast(state)
                         state = 2
                     }
                     source.startsWith("\"\"\"", index) -> {
                         result.append("   ")
                         index += 3
+                        returnStates.addLast(state)
                         state = 4
                     }
                     current == '\"' -> {
                         result.append(' ')
                         index += 1
+                        returnStates.addLast(state)
                         state = 3
                     }
                     current == '\'' -> {
                         result.append(' ')
                         index += 1
+                        returnStates.addLast(state)
                         state = 5
                     }
                     else -> {
@@ -111,7 +123,7 @@ class ArchitectureBoundaryChecker {
                 1 -> {
                     result.append(if (current == '\n') '\n' else ' ')
                     index += 1
-                    if (current == '\n') state = 0
+                    if (current == '\n') state = returnStates.removeLast()
                 }
                 2 -> when {
                     source.startsWith("/*", index) -> {
@@ -123,14 +135,21 @@ class ArchitectureBoundaryChecker {
                         result.append("  ")
                         index += 2
                         blockCommentDepth -= 1
-                        if (blockCommentDepth == 0) state = 0
+                        if (blockCommentDepth == 0) state = returnStates.removeLast()
                     }
                     else -> {
                         result.append(if (current == '\n') '\n' else ' ')
                         index += 1
                     }
                 }
-                3, 5 -> when {
+                3 -> when {
+                    current == '$' && index + 1 < source.length && source[index + 1] == '{' -> {
+                        result.append("  ")
+                        index += 2
+                        templateBraceDepths.addLast(0)
+                        returnStates.addLast(state)
+                        state = 6
+                    }
                     current == '\\' && index + 1 < source.length -> {
                         result.append(' ')
                         index += 1
@@ -138,24 +157,106 @@ class ArchitectureBoundaryChecker {
                         result.append(if (escaped == '\n') '\n' else ' ')
                         index += 1
                     }
-                    (state == 3 && current == '\"') || (state == 5 && current == '\'') -> {
+                    current == '\"' -> {
                         result.append(' ')
                         index += 1
-                        state = 0
+                        state = returnStates.removeLast()
                     }
                     else -> {
                         result.append(if (current == '\n') '\n' else ' ')
                         index += 1
                     }
                 }
-                else -> if (source.startsWith("\"\"\"", index)) {
-                    result.append("   ")
-                    index += 3
-                    state = 0
-                } else {
-                    result.append(if (current == '\n') '\n' else ' ')
-                    index += 1
+                4 -> when {
+                    current == '$' && index + 1 < source.length && source[index + 1] == '{' -> {
+                        result.append("  ")
+                        index += 2
+                        templateBraceDepths.addLast(0)
+                        returnStates.addLast(state)
+                        state = 6
+                    }
+                    source.startsWith("\"\"\"", index) -> {
+                        result.append("   ")
+                        index += 3
+                        state = returnStates.removeLast()
+                    }
+                    else -> {
+                        result.append(if (current == '\n') '\n' else ' ')
+                        index += 1
+                    }
                 }
+                5 -> when {
+                    current == '\\' && index + 1 < source.length -> {
+                        result.append(' ')
+                        index += 1
+                        val escaped = source[index]
+                        result.append(if (escaped == '\n') '\n' else ' ')
+                        index += 1
+                    }
+                    current == '\'' -> {
+                        result.append(' ')
+                        index += 1
+                        state = returnStates.removeLast()
+                    }
+                    else -> {
+                        result.append(if (current == '\n') '\n' else ' ')
+                        index += 1
+                    }
+                }
+                6 -> when {
+                    current == '{' -> {
+                        val depth = templateBraceDepths.removeLast()
+                        templateBraceDepths.addLast(depth + 1)
+                        result.append(current)
+                        index += 1
+                    }
+                    current == '}' -> {
+                        val depth = templateBraceDepths.removeLast()
+                        result.append(if (depth == 0) ' ' else current)
+                        index += 1
+                        if (depth == 0) {
+                            state = returnStates.removeLast()
+                        } else {
+                            templateBraceDepths.addLast(depth - 1)
+                        }
+                    }
+                    source.startsWith("//", index) -> {
+                        result.append("  ")
+                        index += 2
+                        returnStates.addLast(state)
+                        state = 1
+                    }
+                    source.startsWith("/*", index) -> {
+                        result.append("  ")
+                        index += 2
+                        blockCommentDepth = 1
+                        returnStates.addLast(state)
+                        state = 2
+                    }
+                    source.startsWith("\"\"\"", index) -> {
+                        result.append("   ")
+                        index += 3
+                        returnStates.addLast(state)
+                        state = 4
+                    }
+                    current == '\"' -> {
+                        result.append(' ')
+                        index += 1
+                        returnStates.addLast(state)
+                        state = 3
+                    }
+                    current == '\'' -> {
+                        result.append(' ')
+                        index += 1
+                        returnStates.addLast(state)
+                        state = 5
+                    }
+                    else -> {
+                        result.append(current)
+                        index += 1
+                    }
+                }
+                else -> error("Unknown Kotlin scanner state")
             }
         }
         return result.toString()
@@ -165,20 +266,26 @@ class ArchitectureBoundaryChecker {
         var fileAnnotationNesting = 0
 
         code.lineSequence().forEach { line ->
-            val trimmed = line.trim()
-            if (trimmed.isEmpty()) return@forEach
+            var remaining = line.trim()
+            if (remaining.isEmpty()) return@forEach
             if (fileAnnotationNesting > 0) {
-                fileAnnotationNesting += trimmed.count { it == '(' || it == '[' }
-                fileAnnotationNesting -= trimmed.count { it == ')' || it == ']' }
+                fileAnnotationNesting += remaining.count { it == '(' || it == '[' }
+                fileAnnotationNesting -= remaining.count { it == ')' || it == ']' }
                 return@forEach
             }
-            if (trimmed.startsWith("@file:")) {
-                fileAnnotationNesting = trimmed.count { it == '(' || it == '[' }
-                fileAnnotationNesting -= trimmed.count { it == ')' || it == ']' }
-                return@forEach
+            while (remaining.isNotEmpty()) {
+                if (remaining.startsWith("@file:")) {
+                    fileAnnotationNesting = remaining.count { it == '(' || it == '[' }
+                    fileAnnotationNesting -= remaining.count { it == ')' || it == ']' }
+                    return@forEach
+                }
+                if (remaining.startsWith("package ") || remaining.startsWith("import ")) {
+                    val separator = remaining.indexOf(';')
+                    remaining = if (separator < 0) "" else remaining.substring(separator + 1).trimStart()
+                    continue
+                }
+                return true
             }
-            if (trimmed.startsWith("package ") || trimmed.startsWith("import ")) return@forEach
-            return true
         }
         return false
     }
@@ -203,7 +310,7 @@ class ArchitectureBoundaryChecker {
             "(?<![A-Za-z0-9_.])(?:android\\.|androidx\\.(?!compose\\.)|platform\\.|java\\.|kotlinx\\.cinterop\\.|kotlin\\.native\\.|org\\.koin\\.|io\\.ktor\\.|okhttp3\\.|app\\.cash\\.sqldelight\\.|io\\.realm\\.|sqlite\\.)",
         )
         val dataSourceOrDaoReference = Regex(
-            "\\b[A-Z][A-Za-z0-9_]*(?i:Dao|DataSource)\\b",
+            "\\b(?:Dao|DataSource|[A-Z][A-Za-z0-9_]*(?i:Dao|DataSource))\\b",
         )
         val koinReference = Regex("(?<![A-Za-z0-9_.])org\\.koin\\.")
     }
