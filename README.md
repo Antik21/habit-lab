@@ -5,7 +5,7 @@ Offline-first Kotlin Multiplatform app for personal habit experiments, using Hea
 ## Requirements
 
 - JDK 17 or newer (the project is verified with JDK 25).
-- Android SDK Platform 36 and Android Build Tools 36.0.0; set `ANDROID_HOME` or configure it in `local.properties` locally.
+- Android SDK Platform 37 and Android Build Tools 36.0.0; set `ANDROID_HOME` or configure it in `local.properties` locally. The app still targets SDK 36.
 - Xcode 26.4 or newer with an iOS Simulator runtime. The app deploys to iOS 16.0 and newer.
 
 ## Build and run
@@ -23,3 +23,7 @@ xcodebuild -project iosApp/iosApp.xcodeproj -scheme iosApp -sdk iphonesimulator 
 ```
 
 The initial screen deliberately contains only the shared `App()` bootstrap UI. Feature and layer Gradle modules are not created until a task specifically justifies them.
+
+## Shared package boundaries
+
+The shared module keeps `core`, `domain`, `data`, `presentation`, `di`, and `app` as packages rather than Gradle modules. Run `./gradlew :shared:checkArchitectureBoundaries` to verify their common-source dependency directions; it is also part of `:shared:check`.

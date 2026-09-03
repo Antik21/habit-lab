@@ -114,7 +114,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -e\\ncd \"$SRCROOT/..\"\\n./gradlew :shared:embedAndSignAppleFrameworkForXcode";
+			shellScript = "set -e\ncd \"$SRCROOT/..\"\n./gradlew :shared:embedAndSignAppleFrameworkForXcode";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -161,6 +161,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
+				"ARCHS[sdk=iphonesimulator*]" = "$(NATIVE_ARCH_ACTUAL)";
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
@@ -185,6 +186,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
+				"ARCHS[sdk=iphonesimulator*]" = "$(NATIVE_ARCH_ACTUAL)";
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
