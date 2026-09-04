@@ -66,4 +66,4 @@ object ComponentGalleryAutomationIds {
 }
 
 /** Applies an identifier directly to the component's target semantics node. */
-fun Modifier.autodevId(id: AutomationId): Modifier = testTag(id.value)
+fun Modifier.autodevId(id: AutomationId): Modifier = enableAutodevResourceIds().testTag(id.value)
