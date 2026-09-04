@@ -10,6 +10,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import com.denis.habitlab.shared.presentation.navigation.rememberNavigationActionDispatcher
 import com.denis.habitlab.shared.presentation.ui.automation.NavigationSpikeAutomationIds
 import com.denis.habitlab.shared.presentation.ui.automation.autodevId
 import com.denis.habitlab.shared.presentation.ui.component.HabitLabPrimaryButton
@@ -40,11 +41,10 @@ fun NavigationConfirmationDialogScreen(
     }
     Content(
         state = state,
-        onAction = { action ->
-            if (isNavigationActionAllowed()) {
-                viewModel.dispatchAction(action)
-            }
-        },
+        onAction = rememberNavigationActionDispatcher(
+            isNavigationActionAllowed = isNavigationActionAllowed,
+            dispatchAction = viewModel::dispatchAction,
+        ),
     )
 }
 

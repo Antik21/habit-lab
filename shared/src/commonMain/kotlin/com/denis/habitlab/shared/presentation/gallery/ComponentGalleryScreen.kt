@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import com.denis.habitlab.shared.presentation.gallery.sections.GalleryControlsSection
 import com.denis.habitlab.shared.presentation.gallery.sections.GalleryExperimentsSection
 import com.denis.habitlab.shared.presentation.gallery.sections.GalleryStatesSection
+import com.denis.habitlab.shared.presentation.navigation.rememberNavigationActionDispatcher
 import com.denis.habitlab.shared.presentation.ui.automation.ComponentGalleryAutomationIds
 import com.denis.habitlab.shared.presentation.ui.component.HabitLabAppScaffold
 import com.denis.habitlab.shared.presentation.ui.component.HabitLabDialogShell
@@ -59,11 +60,11 @@ fun ComponentGalleryScreen(
         appTitle = appTitle,
         state = state,
         isDialogVisible = isDialogVisible,
-        onAction = { action ->
-            if (!action.requiresResumedEntry() || isNavigationActionAllowed()) {
-                viewModel.dispatchAction(action)
-            }
-        },
+        onAction = rememberNavigationActionDispatcher(
+            isNavigationActionAllowed = isNavigationActionAllowed,
+            requiresResumedEntry = Action::requiresResumedEntry,
+            dispatchAction = viewModel::dispatchAction,
+        ),
     )
 }
 

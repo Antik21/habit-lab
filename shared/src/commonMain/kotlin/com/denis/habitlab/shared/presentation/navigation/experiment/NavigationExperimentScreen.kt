@@ -12,6 +12,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import com.denis.habitlab.shared.presentation.navigation.ExperimentDialogResult
+import com.denis.habitlab.shared.presentation.navigation.rememberNavigationActionDispatcher
 import com.denis.habitlab.shared.presentation.ui.automation.NavigationSpikeAutomationIds
 import com.denis.habitlab.shared.presentation.ui.automation.autodevId
 import com.denis.habitlab.shared.presentation.ui.component.HabitLabAppScaffold
@@ -63,11 +64,10 @@ fun NavigationExperimentScreen(
     Content(
         state = state,
         dialogResult = dialogResult,
-        onAction = { action ->
-            if (isNavigationActionAllowed()) {
-                viewModel.dispatchAction(action)
-            }
-        },
+        onAction = rememberNavigationActionDispatcher(
+            isNavigationActionAllowed = isNavigationActionAllowed,
+            dispatchAction = viewModel::dispatchAction,
+        ),
     )
 }
 

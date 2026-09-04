@@ -12,8 +12,9 @@ boundary then resolves a common AndroidX ViewModel from Koin for that entry. Eac
 an immutable Orbit `ViewState` and emits typed one-shot `SideEffect`; it receives neither Koin nor a
 Navigator. The screen collects these effects, handles `ViewEffect` locally, and forwards
 `NavigationEffect` to the common host, which validates every requested transition.
-User navigation input is accepted only while its entry lifecycle is `RESUMED`; structural effects
-such as `PopToRoot` are not lifecycle-gated and therefore cannot be lost under a dialog or transition.
+Entry-owned UI actions that leave the screen are accepted only while their entry lifecycle is
+`RESUMED`; system back and iOS edge-back requests are handled directly by the common host. Structural
+effects such as `PopToRoot` are not lifecycle-gated and cannot be lost under a dialog or transition.
 
 An experiment route passes its typed ID only. `NavigationExperimentViewModel` observes a current
 `ExperimentProjection` via the domain `ExperimentProjectionObserver` abstraction. The present
