@@ -9,7 +9,7 @@ class ExperimentEditorUiMapper {
     ): ViewState = when (observation) {
         is ExperimentProjectionObservation.Available -> currentState.copy(
             content = ContentUiModel.Ready,
-            name = if (currentState.hasHydratedInitialName || currentState.isNameDirty) {
+            name = if (currentState.hasHydratedInitialName) {
                 currentState.name
             } else {
                 observation.projection.displayName

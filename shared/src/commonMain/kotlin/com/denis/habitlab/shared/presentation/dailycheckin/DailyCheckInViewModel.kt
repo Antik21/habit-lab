@@ -62,7 +62,13 @@ class DailyCheckInViewModel(
 
     private fun onIntentSelected(selected: CheckInSelectionUiModel) = intent {
         if (!state.isSaving && state.content == ContentUiModel.Ready) {
-            reduce { state.copy(selectedOutcome = selected, commandError = false) }
+            reduce {
+                state.copy(
+                    selectedOutcome = selected,
+                    hasUserSelectedOutcome = true,
+                    commandError = false,
+                )
+            }
         }
     }
 

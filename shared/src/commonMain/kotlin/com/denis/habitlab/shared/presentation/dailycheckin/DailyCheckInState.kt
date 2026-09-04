@@ -13,7 +13,7 @@ data class ViewState(
     val localDateDisplay: String,
     val content: ContentUiModel = ContentUiModel.Loading,
     val selectedOutcome: CheckInSelectionUiModel = CheckInSelectionUiModel.PERFORMED,
-    val hasHydratedInitialSelection: Boolean = false,
+    val hasUserSelectedOutcome: Boolean = false,
     val persistedOutcome: PersistedCheckInStatusUiModel? = null,
     val isSaving: Boolean = false,
     val commandError: Boolean = false,

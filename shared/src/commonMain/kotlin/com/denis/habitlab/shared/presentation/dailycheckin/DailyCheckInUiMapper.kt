@@ -22,19 +22,17 @@ class DailyCheckInUiMapper {
             val persistedOutcome = observation.checkIn.outcome.toPersistedOutcome()
             currentState.copy(
                 content = ContentUiModel.Ready,
-                selectedOutcome = if (currentState.hasHydratedInitialSelection) {
+                selectedOutcome = if (currentState.hasUserSelectedOutcome) {
                     currentState.selectedOutcome
                 } else {
                     persistedOutcome.toSelection()
                 },
-                hasHydratedInitialSelection = true,
                 persistedOutcome = persistedOutcome,
             )
         }
 
         DailyCheckInObservation.Missing -> currentState.copy(
             content = ContentUiModel.Ready,
-            hasHydratedInitialSelection = true,
             persistedOutcome = null,
         )
 

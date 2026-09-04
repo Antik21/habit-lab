@@ -22,19 +22,34 @@ class DailyCheckInUiMapperTest {
     private val mapper = DailyCheckInUiMapper()
 
     @Test
-    fun persistedOutcomeIsShownSeparatelyAndRepeatedObservationsKeepTheUsersSelection() {
+    fun missingThenAvailableHydratesThePersistedOutcomeWhenTheUserHasNotSelectedOne() {
         val initial = mapper.initialState(experimentId, date)
-        val firstObservation = mapper.map(skippedCheckIn(), initial)
-        val userSelectedPerformed = firstObservation.copy(selectedOutcome = CheckInSelectionUiModel.PERFORMED)
+        val afterMissing = mapper.map(DailyCheckInObservation.Missing, initial)
 
-        val reobserved = mapper.map(skippedCheckIn(), userSelectedPerformed)
+        val available = mapper.map(skippedCheckIn(), afterMissing)
 
-        assertEquals(ContentUiModel.Ready, firstObservation.content)
-        assertEquals(CheckInSelectionUiModel.SKIPPED, firstObservation.selectedOutcome)
-        assertEquals(PersistedCheckInStatusUiModel.SKIPPED, firstObservation.persistedOutcome)
-        assertTrue(firstObservation.hasHydratedInitialSelection)
-        assertEquals(CheckInSelectionUiModel.PERFORMED, reobserved.selectedOutcome)
-        assertEquals(PersistedCheckInStatusUiModel.SKIPPED, reobserved.persistedOutcome)
+        assertEquals(ContentUiModel.Ready, afterMissing.content)
+        assertNull(afterMissing.persistedOutcome)
+        assertFalse(afterMissing.hasUserSelectedOutcome)
+        assertEquals(ContentUiModel.Ready, available.content)
+        assertEquals(CheckInSelectionUiModel.SKIPPED, available.selectedOutcome)
+        assertEquals(PersistedCheckInStatusUiModel.SKIPPED, available.persistedOutcome)
+        assertFalse(available.hasUserSelectedOutcome)
+    }
+
+    @Test
+    fun missingThenUserSelectionThenAvailablePreservesTheUsersSelection() {
+        val afterMissing = mapper.map(DailyCheckInObservation.Missing, mapper.initialState(experimentId, date))
+        val userSelectedPerformed = afterMissing.copy(
+            selectedOutcome = CheckInSelectionUiModel.PERFORMED,
+            hasUserSelectedOutcome = true,
+        )
+
+        val available = mapper.map(skippedCheckIn(), userSelectedPerformed)
+
+        assertEquals(CheckInSelectionUiModel.PERFORMED, available.selectedOutcome)
+        assertEquals(PersistedCheckInStatusUiModel.SKIPPED, available.persistedOutcome)
+        assertTrue(available.hasUserSelectedOutcome)
     }
 
     @Test
@@ -48,7 +63,7 @@ class DailyCheckInUiMapperTest {
         assertEquals(ContentUiModel.Ready, mapped.content)
         assertEquals(CheckInSelectionUiModel.SKIPPED, mapped.selectedOutcome)
         assertNull(mapped.persistedOutcome)
-        assertTrue(mapped.hasHydratedInitialSelection)
+        assertFalse(mapped.hasUserSelectedOutcome)
     }
 
     @Test
@@ -56,7 +71,7 @@ class DailyCheckInUiMapperTest {
         val currentState = mapper.initialState(experimentId, date).copy(
             content = ContentUiModel.Ready,
             selectedOutcome = CheckInSelectionUiModel.SKIPPED,
-            hasHydratedInitialSelection = true,
+            hasUserSelectedOutcome = true,
             persistedOutcome = PersistedCheckInStatusUiModel.PERFORMED,
             isSaving = true,
         )

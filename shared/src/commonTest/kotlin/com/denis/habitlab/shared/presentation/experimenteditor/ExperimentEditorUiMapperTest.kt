@@ -8,7 +8,6 @@ import com.denis.habitlab.shared.domain.repository.StorageFailure
 import com.denis.habitlab.shared.domain.repository.StorageOperation
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ExperimentEditorUiMapperTest {
@@ -16,21 +15,19 @@ class ExperimentEditorUiMapperTest {
     private val mapper = ExperimentEditorUiMapper()
 
     @Test
-    fun persistedNameHydratesOnceAndDoesNotOverwriteAClearedDirtyField() {
+    fun persistedNameHydratesOnceAndDoesNotOverwriteAClearedField() {
         val initialState = ViewState(experimentId = experimentId, content = ContentUiModel.Loading)
 
         val hydrated = mapper.map(available(name = "Persisted name"), initialState)
-        val userCleared = hydrated.copy(name = "", isNameDirty = true)
+        val userCleared = hydrated.copy(name = "")
         val reobserved = mapper.map(available(name = "Changed remotely"), userCleared)
 
         assertEquals(ContentUiModel.Ready, hydrated.content)
         assertEquals("Persisted name", hydrated.name)
         assertTrue(hydrated.hasHydratedInitialName)
-        assertFalse(hydrated.isNameDirty)
         assertEquals(ContentUiModel.Ready, reobserved.content)
         assertEquals("", reobserved.name)
         assertTrue(reobserved.hasHydratedInitialName)
-        assertTrue(reobserved.isNameDirty)
     }
 
     @Test
@@ -40,7 +37,6 @@ class ExperimentEditorUiMapperTest {
             content = ContentUiModel.Ready,
             name = "Unsaved value",
             hasHydratedInitialName = true,
-            isNameDirty = true,
         )
 
         val mapped = mapper.map(

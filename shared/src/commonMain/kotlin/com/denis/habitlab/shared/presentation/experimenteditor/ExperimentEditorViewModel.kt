@@ -58,7 +58,6 @@ class ExperimentEditorViewModel(
                 state.copy(
                     name = value,
                     hasHydratedInitialName = true,
-                    isNameDirty = true,
                     validationError = false,
                     commandError = false,
                 )

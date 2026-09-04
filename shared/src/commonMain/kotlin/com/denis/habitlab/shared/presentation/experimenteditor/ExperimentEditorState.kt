@@ -11,7 +11,6 @@ data class ViewState(
     val content: ContentUiModel = ContentUiModel.Ready,
     val name: String = "",
     val hasHydratedInitialName: Boolean = experimentId == null,
-    val isNameDirty: Boolean = false,
     val metric: MetricKind? = null,
     val isSaving: Boolean = false,
     val validationError: Boolean = false,
