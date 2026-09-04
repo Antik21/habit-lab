@@ -19,9 +19,10 @@ confirmation is a `DialogSceneStrategy` entry. Its typed result is delivered to 
 only after that dialog entry is popped; system or gesture dismissal maps to `cancelled`.
 
 Entry-owned screen actions are ignored unless their entry is `RESUMED`, which prevents duplicate
-pushes while a transition is running. Platform back and external URL callbacks enter through distinct
-common bridge signals and are not covered by that entry guard. `HabitLabDeepLink` accepts only these
-exact routes:
+pushes while a transition is running. External URLs and the iOS edge adapter use distinct common bridge
+signals; Android system back is connected directly from `NavDisplay` to the same navigator. These
+platform callbacks are not covered by the entry guard. `HabitLabDeepLink` accepts only these exact
+routes:
 
 - `habitlab://experiment/daily-movement`
 - `habitlab://experiment/sleep-routine`
