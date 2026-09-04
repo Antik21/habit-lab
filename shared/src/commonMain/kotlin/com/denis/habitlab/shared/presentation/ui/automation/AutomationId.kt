@@ -23,21 +23,60 @@ enum class AutomationId(
     GalleryLoadingState("habitlab.gallery.state.loading"),
     GalleryEmptyState("habitlab.gallery.state.empty"),
     GalleryErrorState("habitlab.gallery.state.error"),
+    NavigationExperimentScreenRoot("habitlab.navigation.experiment.screen.root"),
+    NavigationExperimentToolbarBack("habitlab.navigation.experiment.toolbar.back"),
+    NavigationExperimentOpenDialog("habitlab.navigation.experiment.action.open-dialog"),
+    NavigationExperimentStartFlow("habitlab.navigation.experiment.action.start-flow"),
+    NavigationExperimentOpenSettings("habitlab.navigation.experiment.action.open-settings"),
+    NavigationFlowStepOneScreenRoot("habitlab.navigation.flow.step-one.screen.root"),
+    NavigationFlowStepOneToolbarBack("habitlab.navigation.flow.step-one.toolbar.back"),
+    NavigationFlowStepOneNext("habitlab.navigation.flow.step-one.action.next"),
+    NavigationFlowStepTwoScreenRoot("habitlab.navigation.flow.step-two.screen.root"),
+    NavigationFlowStepTwoToolbarBack("habitlab.navigation.flow.step-two.toolbar.back"),
+    NavigationFlowStepTwoFinish("habitlab.navigation.flow.step-two.action.finish"),
+    NavigationDialogScreenRoot("habitlab.navigation.dialog.screen.root"),
+    NavigationDialogConfirm("habitlab.navigation.dialog.action.confirm"),
+    NavigationDialogCancel("habitlab.navigation.dialog.action.cancel"),
+    NavigationDialogResultConfirmed("habitlab.navigation.dialog.result.confirmed"),
+    NavigationDialogResultCancelled("habitlab.navigation.dialog.result.cancelled"),
     ;
 
     internal companion object {
         fun validateContract() {
             val values = entries.map(AutomationId::value)
-            require(values.all { it.startsWith(GALLERY_NAMESPACE) }) {
-                "Automation IDs must use the habitlab.gallery namespace."
+            require(values.all { value -> SUPPORTED_NAMESPACES.any(value::startsWith) }) {
+                "Automation IDs must use one of the declared Habit Lab namespaces."
             }
             require(values.toSet().size == values.size) {
                 "Automation IDs must be unique."
             }
         }
 
-        private const val GALLERY_NAMESPACE = "habitlab.gallery."
+        private val SUPPORTED_NAMESPACES = listOf(
+            "habitlab.gallery.",
+            "habitlab.navigation.",
+        )
     }
+}
+
+/** Fixed selectors exposed by the shared Navigation 3 compatibility spike. */
+object NavigationSpikeAutomationIds {
+    val experimentScreenRoot = AutomationId.NavigationExperimentScreenRoot
+    val experimentToolbarBack = AutomationId.NavigationExperimentToolbarBack
+    val experimentOpenDialog = AutomationId.NavigationExperimentOpenDialog
+    val experimentStartFlow = AutomationId.NavigationExperimentStartFlow
+    val experimentOpenSettings = AutomationId.NavigationExperimentOpenSettings
+    val flowStepOneScreenRoot = AutomationId.NavigationFlowStepOneScreenRoot
+    val flowStepOneToolbarBack = AutomationId.NavigationFlowStepOneToolbarBack
+    val flowStepOneNext = AutomationId.NavigationFlowStepOneNext
+    val flowStepTwoScreenRoot = AutomationId.NavigationFlowStepTwoScreenRoot
+    val flowStepTwoToolbarBack = AutomationId.NavigationFlowStepTwoToolbarBack
+    val flowStepTwoFinish = AutomationId.NavigationFlowStepTwoFinish
+    val dialogScreenRoot = AutomationId.NavigationDialogScreenRoot
+    val dialogConfirm = AutomationId.NavigationDialogConfirm
+    val dialogCancel = AutomationId.NavigationDialogCancel
+    val dialogResultConfirmed = AutomationId.NavigationDialogResultConfirmed
+    val dialogResultCancelled = AutomationId.NavigationDialogResultCancelled
 }
 
 /**

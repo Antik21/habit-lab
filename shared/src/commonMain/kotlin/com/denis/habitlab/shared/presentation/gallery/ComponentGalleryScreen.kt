@@ -59,6 +59,25 @@ import org.jetbrains.compose.resources.stringResource
 
 @Composable
 fun ComponentGalleryScreen(appTitle: String) {
+    ComponentGalleryScreen(
+        appTitle = appTitle,
+        onBack = {},
+        onOpenExperiment = {},
+        onStartFlow = {},
+    )
+}
+
+/**
+ * The gallery remains the app root. Navigation callbacks are supplied by the app-owned Nav3 host
+ * so this presentation component never owns a back stack or platform behavior.
+ */
+@Composable
+fun ComponentGalleryScreen(
+    appTitle: String,
+    onBack: () -> Unit,
+    onOpenExperiment: (String) -> Unit,
+    onStartFlow: () -> Unit,
+) {
     var habitName by remember { mutableStateOf("") }
     var isDialogVisible by remember { mutableStateOf(false) }
 
@@ -73,7 +92,7 @@ fun ComponentGalleryScreen(appTitle: String) {
                         Res.string.gallery_back_accessibility_label,
                     ),
                     backAutomationId = ComponentGalleryAutomationIds.toolbarBack,
-                    onBack = {},
+                    onBack = onBack,
                 )
             },
         ) { contentPadding ->
@@ -99,7 +118,7 @@ fun ComponentGalleryScreen(appTitle: String) {
                         modifier = Modifier.fillMaxWidth(),
                         label = stringResource(Res.string.gallery_secondary_action_label),
                         automationId = ComponentGalleryAutomationIds.secondaryAction,
-                        onClick = {},
+                        onClick = onStartFlow,
                     )
                     HabitLabTextField(
                         value = habitName,
@@ -119,7 +138,7 @@ fun ComponentGalleryScreen(appTitle: String) {
                             Res.string.gallery_row_daily_movement_accessibility_label,
                         ),
                         automationId = ComponentGalleryAutomationIds.firstRow,
-                        onClick = {},
+                        onClick = { onOpenExperiment(DAILY_MOVEMENT_EXPERIMENT_ID) },
                     )
                     HabitLabClickableListRow(
                         title = stringResource(Res.string.gallery_row_sleep_routine_title),
@@ -130,7 +149,7 @@ fun ComponentGalleryScreen(appTitle: String) {
                             Res.string.gallery_row_sleep_routine_accessibility_label,
                         ),
                         automationId = ComponentGalleryAutomationIds.secondRow,
-                        onClick = {},
+                        onClick = { onOpenExperiment(SLEEP_ROUTINE_EXPERIMENT_ID) },
                     )
                     HabitLabLoadingBlock(
                         title = stringResource(Res.string.gallery_loading_title),
@@ -172,3 +191,6 @@ fun ComponentGalleryScreen(appTitle: String) {
         }
     }
 }
+
+private const val DAILY_MOVEMENT_EXPERIMENT_ID = "daily-movement"
+private const val SLEEP_ROUTINE_EXPERIMENT_ID = "sleep-routine"

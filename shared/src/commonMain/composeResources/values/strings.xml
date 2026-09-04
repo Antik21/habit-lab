@@ -5,7 +5,7 @@
     <string name="gallery_back_action_label">‹</string>
     <string name="gallery_back_accessibility_label">Go back</string>
     <string name="gallery_primary_action_label">Open dialog</string>
-    <string name="gallery_secondary_action_label">Secondary action</string>
+    <string name="gallery_secondary_action_label">Start nested flow</string>
     <string name="gallery_field_label">Habit name</string>
     <string name="gallery_field_accessibility_label">Habit name input</string>
     <string name="gallery_row_daily_movement_title">Daily movement</string>
@@ -26,4 +26,23 @@
     <string name="gallery_dialog_message">This is a reusable dialog shell.</string>
     <string name="gallery_dialog_confirm_label">Confirm</string>
     <string name="gallery_dialog_dismiss_label">Dismiss</string>
+    <string name="navigation_back_action_label">‹</string>
+    <string name="navigation_back_accessibility_label">Go back</string>
+    <string name="navigation_experiment_title">Experiment: %1$s</string>
+    <string name="navigation_experiment_subtitle">Typed navigation argument: %1$s</string>
+    <string name="navigation_experiment_open_dialog_label">Open confirmation dialog</string>
+    <string name="navigation_experiment_start_flow_label">Start nested flow</string>
+    <string name="navigation_experiment_open_settings_label">Open app settings</string>
+    <string name="navigation_flow_step_one_title">Flow %1$s: step 1</string>
+    <string name="navigation_flow_step_one_subtitle">This route is the first entry in one shared back stack.</string>
+    <string name="navigation_flow_step_two_title">Flow %1$s: step 2</string>
+    <string name="navigation_flow_step_two_subtitle">Back returns to step 1 without a nested NavDisplay.</string>
+    <string name="navigation_flow_next_label">Continue</string>
+    <string name="navigation_flow_finish_label">Finish flow</string>
+    <string name="navigation_dialog_title">Confirm %1$s</string>
+    <string name="navigation_dialog_message">The result is typed and delivered after this Nav3 overlay pops.</string>
+    <string name="navigation_dialog_confirm_label">Confirm</string>
+    <string name="navigation_dialog_cancel_label">Cancel</string>
+    <string name="navigation_dialog_result_confirmed">Confirmation result: confirmed</string>
+    <string name="navigation_dialog_result_cancelled">Confirmation result: cancelled</string>
 </resources>
