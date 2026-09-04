@@ -10,6 +10,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.isSystemInDarkTheme
+import com.denis.habitlab.shared.domain.model.ThemePreference
 
 object HabitLabColorTokens {
     val Brand = Color(0xFF2563EB)
@@ -78,9 +79,14 @@ private val DarkColorScheme = darkColorScheme(
 
 @Composable
 fun HabitLabTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    preference: ThemePreference = ThemePreference.SYSTEM,
     content: @Composable () -> Unit,
 ) {
+    val darkTheme = when (preference) {
+        ThemePreference.SYSTEM -> isSystemInDarkTheme()
+        ThemePreference.LIGHT -> false
+        ThemePreference.DARK -> true
+    }
     MaterialTheme(
         colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme,
         typography = HabitLabTypography,

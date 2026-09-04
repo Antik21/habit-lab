@@ -73,6 +73,7 @@ kotlin {
             implementation(libs.kotlinx.serialization.core)
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.kotlinx.datetime)
+            implementation(libs.kotlinx.collections.immutable)
             implementation(libs.androidx.room3.runtime)
             implementation(libs.androidx.sqlite.bundled)
         }

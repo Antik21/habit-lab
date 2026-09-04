@@ -22,10 +22,10 @@ For a command-line simulator build:
 xcodebuild -project iosApp/iosApp.xcodeproj -scheme iosApp -sdk iphonesimulator -configuration Debug build
 ```
 
-`App()` boots a shared, scrollable component gallery as its root destination. It demonstrates the
-common Material 3 theme, toolbar, buttons, text field, rows, loading/empty/error blocks, and the
-production Navigation 3 shell on both Android and iOS. Feature and layer Gradle modules are not
-created until a task specifically justifies them.
+`App()` boots a shared Experiment List as its root destination. It is backed by the common Room
+projection and provides the reference List, Details, Editor, Daily Check-in, and Settings screens
+on both Android and iOS. Feature and layer Gradle modules are not created until a task specifically
+justifies them.
 
 ## Production Navigation 3 shell
 
@@ -65,8 +65,10 @@ only a completed back request to the common navigator, keeping the Nav3 stack as
 truth. The rationale and removal criteria are recorded in
 [`docs/adr/0001-navigation3-ios-edge-adapter.md`](docs/adr/0001-navigation3-ios-edge-adapter.md).
 
-The gallery primary action remains the legacy `Open dialog` control and retains its existing gallery-dialog
-selectors. Gallery rows open experiments, while the secondary action starts the nested navigation flow.
+The root list opens every persisted `ExperimentSummary`, including locally generated `draft-*` IDs.
+It can create a draft, open Settings, and navigate to Details; Details opens the draft editor, the
+typed LocalDate daily check-in, and the destructive confirmation dialog. The legacy gallery and
+two-step flow packages remain source-compatible historical scaffolding, but are no longer app routes.
 
 ## UI automation contract
 
@@ -85,6 +87,21 @@ conditionals and each target node is tagged directly rather than relying on the 
 ## Shared package boundaries
 
 The shared module keeps `core`, `domain`, `data`, `presentation`, `di`, and `app` as packages rather than Gradle modules. Run `./gradlew :shared:checkArchitectureBoundaries` to verify their common-source dependency directions; it is also part of `:shared:check`.
+
+## Reference screen contracts
+
+DEN-12 adds one common Navigation 3 stack with route-only `ExperimentId` and typed local-date
+arguments. The route snapshot is version 2; old snapshots are rejected safely and restart at the
+Experiment List. Metric picking returns a one-shot typed result only to its editor caller. Delete
+confirmation performs the real narrow domain/repository/Room delete path before its result is
+delivered; Room's existing cascade removes dependent check-ins.
+
+Settings uses a process-owned, observable common theme preference. It immediately changes
+`HabitLabTheme` across active Android and iOS entries, but is intentionally not persisted in DEN-12:
+adding DataStore or a platform preference implementation solely for this reference screen would
+introduce an unsupported persistence policy. The selected metric is likewise a typed editor UI
+choice used to demonstrate caller-scoped dialog results; v1 `Experiment` has no metric field, so
+it is not persisted as an experiment attribute.
 
 ## Offline-first experiment persistence
 

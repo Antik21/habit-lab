@@ -16,12 +16,15 @@ interface ExperimentRepository {
     ): EditDraftResult
 
     suspend fun recordDailyCheckIn(checkIn: DailyCheckIn): RecordDailyCheckInResult
+
+    suspend fun deleteExperiment(experimentId: ExperimentId): DeleteExperimentResult
 }
 
 enum class StorageOperation {
     CREATE_DRAFT,
     EDIT_DRAFT,
     RECORD_DAILY_CHECK_IN,
+    DELETE_EXPERIMENT,
     OBSERVE_EXPERIMENTS,
     OBSERVE_EXPERIMENT,
     OBSERVE_DAILY_CHECK_IN,
@@ -55,4 +58,17 @@ sealed interface RecordDailyCheckInResult {
     data class Missing(val experimentId: ExperimentId) : RecordDailyCheckInResult
 
     data class Failed(val failure: StorageFailure) : RecordDailyCheckInResult
+
+    data class InvalidPerformedDate(
+        val experimentId: ExperimentId,
+        val localDate: kotlinx.datetime.LocalDate,
+    ) : RecordDailyCheckInResult
+}
+
+sealed interface DeleteExperimentResult {
+    data class Deleted(val experimentId: ExperimentId) : DeleteExperimentResult
+
+    data class Missing(val experimentId: ExperimentId) : DeleteExperimentResult
+
+    data class Failed(val failure: StorageFailure) : DeleteExperimentResult
 }

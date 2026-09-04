@@ -43,6 +43,9 @@ internal interface ExperimentDao {
     @Query("SELECT COUNT(*) FROM experiments WHERE id = :experimentId")
     suspend fun experimentCount(experimentId: String): Int
 
+    @Query("DELETE FROM experiments WHERE id = :experimentId")
+    suspend fun deleteExperiment(experimentId: String): Int
+
     @Query("SELECT COUNT(*) FROM experiments")
     suspend fun totalExperimentCount(): Int
 
@@ -95,6 +98,10 @@ internal interface ExperimentDao {
         insertOrReplaceCheckIn(entity)
         return true
     }
+
+    @Transaction
+    suspend fun deleteExperimentIfPresent(experimentId: String): Boolean =
+        deleteExperiment(experimentId) == 1
 
     @Transaction
     suspend fun seedIfEmpty(seed: DebugSeed): Boolean {

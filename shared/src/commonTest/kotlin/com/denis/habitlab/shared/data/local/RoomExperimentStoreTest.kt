@@ -17,6 +17,7 @@ import com.denis.habitlab.shared.domain.observer.DailyCheckInObservation
 import com.denis.habitlab.shared.domain.observer.ExperimentListObservation
 import com.denis.habitlab.shared.domain.observer.ExperimentProjectionObservation
 import com.denis.habitlab.shared.domain.repository.CreateDraftResult
+import com.denis.habitlab.shared.domain.repository.DeleteExperimentResult
 import com.denis.habitlab.shared.domain.repository.EditDraftResult
 import com.denis.habitlab.shared.domain.repository.RecordDailyCheckInResult
 import com.denis.habitlab.shared.domain.repository.StorageFailure
@@ -139,6 +140,36 @@ class RoomExperimentStoreTest {
                     updatedAt = recordedAt("2026-01-03T10:00:00Z", LocalDate.parse("2026-01-03")),
                 ),
             )
+        } finally {
+            database.close()
+        }
+    }
+
+    @Test
+    fun deleteMapsMissingAndDeletedResultsAndCascadesDependentCheckIns() = runBlocking {
+        val database = inMemoryDatabase()
+        try {
+            val source = RoomExperimentLocalDataSource(database)
+            val repository = RoomExperimentRepository(source)
+            val observers = RoomExperimentObservers(
+                localDataSource = source,
+                databaseReadiness = DatabaseReadiness(DatabaseReadinessState.Ready),
+            )
+            val draft = draft(id = "draft-delete1", name = "Delete me")
+            val date = LocalDate.parse("2026-01-03")
+            val checkIn = DailyCheckIn(
+                experimentId = draft.id,
+                localDate = date,
+                outcome = CheckInOutcome.Skipped,
+                recordedAt = recordedAt("2026-01-03T10:00:00Z", date),
+            )
+
+            assertEquals(CreateDraftResult.Created(draft), repository.createDraft(draft))
+            assertEquals(RecordDailyCheckInResult.Recorded(checkIn), repository.recordDailyCheckIn(checkIn))
+
+            assertEquals(DeleteExperimentResult.Deleted(draft.id), repository.deleteExperiment(draft.id))
+            assertEquals(DailyCheckInObservation.Missing, observers.observe(draft.id, date).first())
+            assertEquals(DeleteExperimentResult.Missing(draft.id), repository.deleteExperiment(draft.id))
         } finally {
             database.close()
         }

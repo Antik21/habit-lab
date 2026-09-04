@@ -7,11 +7,13 @@ import com.denis.habitlab.shared.domain.model.ExperimentId
 import com.denis.habitlab.shared.domain.model.ExperimentName
 import com.denis.habitlab.shared.domain.model.ExperimentStatus
 import com.denis.habitlab.shared.domain.model.RecordedAt
+import com.denis.habitlab.shared.domain.model.OccurredAt
 import kotlinx.datetime.LocalDate
 import com.denis.habitlab.shared.domain.repository.CreateDraftResult
 import com.denis.habitlab.shared.domain.repository.EditDraftResult
 import com.denis.habitlab.shared.domain.repository.ExperimentRepository
 import com.denis.habitlab.shared.domain.repository.RecordDailyCheckInResult
+import com.denis.habitlab.shared.domain.repository.DeleteExperimentResult
 
 interface ExperimentIdSource {
     fun nextDraftId(): ExperimentId
@@ -57,13 +59,47 @@ class RecordDailyCheckIn(
     suspend operator fun invoke(
         experimentId: ExperimentId,
         localDate: LocalDate,
-        outcome: CheckInOutcome,
-    ): RecordDailyCheckInResult = repository.recordDailyCheckIn(
-        DailyCheckIn(
-            experimentId = experimentId,
-            localDate = localDate,
-            outcome = outcome,
-            recordedAt = recordedAtSource.now(),
-        ),
-    )
+        intent: DailyCheckInIntent,
+    ): RecordDailyCheckInResult {
+        val recordedAt = recordedAtSource.now()
+        val outcome = when (intent) {
+            DailyCheckInIntent.SKIPPED -> CheckInOutcome.Skipped
+            DailyCheckInIntent.PERFORMED -> {
+                if (recordedAt.localDate != localDate) {
+                    return RecordDailyCheckInResult.InvalidPerformedDate(
+                        experimentId = experimentId,
+                        localDate = localDate,
+                    )
+                }
+                CheckInOutcome.Performed(
+                    OccurredAt(
+                        utcInstant = recordedAt.utcInstant,
+                        originalOffset = recordedAt.originalOffset,
+                        localDate = localDate,
+                    ),
+                )
+            }
+        }
+        return repository.recordDailyCheckIn(
+            DailyCheckIn(
+                experimentId = experimentId,
+                localDate = localDate,
+                outcome = outcome,
+                recordedAt = recordedAt,
+            ),
+        )
+    }
+}
+
+/** Typed user intent; the interactor, not UI, creates time-bearing domain outcome values. */
+enum class DailyCheckInIntent {
+    PERFORMED,
+    SKIPPED,
+}
+
+class DeleteExperiment(
+    private val repository: ExperimentRepository,
+) {
+    suspend operator fun invoke(experimentId: ExperimentId): DeleteExperimentResult =
+        repository.deleteExperiment(experimentId)
 }

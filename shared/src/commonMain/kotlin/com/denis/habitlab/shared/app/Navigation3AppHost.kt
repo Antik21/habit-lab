@@ -11,76 +11,69 @@ import androidx.navigation3.runtime.NavBackStack
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
-import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.scene.DialogSceneStrategy
 import androidx.navigation3.scene.SinglePaneSceneStrategy
 import androidx.navigation3.ui.NavDisplay
 import androidx.savedstate.serialization.SavedStateConfiguration
-import com.denis.habitlab.shared.presentation.gallery.ComponentGalleryScreen
-import com.denis.habitlab.shared.presentation.gallery.ComponentGalleryViewModel
-import com.denis.habitlab.shared.presentation.gallery.NavigationEffect as GalleryNavigationEffect
-import com.denis.habitlab.shared.presentation.navigation.ExperimentDialogResult as NavigationDialogResult
-import com.denis.habitlab.shared.presentation.navigation.confirmation.NavigationConfirmationDialogScreen
-import com.denis.habitlab.shared.presentation.navigation.confirmation.NavigationConfirmationDialogViewModel
-import com.denis.habitlab.shared.presentation.navigation.confirmation.NavigationEffect as ConfirmationNavigationEffect
-import com.denis.habitlab.shared.presentation.navigation.experiment.NavigationEffect as ExperimentNavigationEffect
+import com.denis.habitlab.shared.presentation.confirmdelete.ConfirmDeleteScreen
+import com.denis.habitlab.shared.presentation.confirmdelete.ConfirmDeleteViewModel
+import com.denis.habitlab.shared.presentation.dailycheckin.DailyCheckInScreen
+import com.denis.habitlab.shared.presentation.dailycheckin.DailyCheckInViewModel
+import com.denis.habitlab.shared.presentation.experimentdetails.ExperimentDetailsScreen
+import com.denis.habitlab.shared.presentation.experimentdetails.ExperimentDetailsViewModel
+import com.denis.habitlab.shared.presentation.experimenteditor.ExperimentEditorScreen
+import com.denis.habitlab.shared.presentation.experimenteditor.ExperimentEditorViewModel
+import com.denis.habitlab.shared.presentation.experimentlist.ExperimentListScreen
+import com.denis.habitlab.shared.presentation.experimentlist.ExperimentListViewModel
+import com.denis.habitlab.shared.presentation.metricpicker.MetricPickerScreen
+import com.denis.habitlab.shared.presentation.metricpicker.MetricPickerViewModel
+import com.denis.habitlab.shared.presentation.navigation.DeleteDialogResult
+import com.denis.habitlab.shared.presentation.navigation.ExperimentEditorEntryArguments
+import com.denis.habitlab.shared.presentation.navigation.MetricPickerEntryArguments
+import com.denis.habitlab.shared.presentation.navigation.ExperimentDialogResult as LegacyExperimentDialogResult
 import com.denis.habitlab.shared.presentation.navigation.experiment.NavigationDialogResultDisplay
-import com.denis.habitlab.shared.presentation.navigation.experiment.NavigationExperimentScreen
-import com.denis.habitlab.shared.presentation.navigation.experiment.NavigationExperimentViewModel
-import com.denis.habitlab.shared.presentation.navigation.flow.stepone.NavigationEffect as FlowStepOneNavigationEffect
-import com.denis.habitlab.shared.presentation.navigation.flow.stepone.NavigationFlowStepOneScreen
-import com.denis.habitlab.shared.presentation.navigation.flow.stepone.NavigationFlowStepOneViewModel
-import com.denis.habitlab.shared.presentation.navigation.flow.steptwo.NavigationEffect as FlowStepTwoNavigationEffect
-import com.denis.habitlab.shared.presentation.navigation.flow.steptwo.NavigationFlowStepTwoScreen
-import com.denis.habitlab.shared.presentation.navigation.flow.steptwo.NavigationFlowStepTwoViewModel
+import com.denis.habitlab.shared.presentation.navigation.MetricPickerResult
+import com.denis.habitlab.shared.presentation.settings.SettingsScreen
+import com.denis.habitlab.shared.presentation.settings.SettingsViewModel
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.withContext
+import kotlinx.datetime.LocalDate
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.polymorphic
 import kotlinx.serialization.modules.subclass
 
-/**
- * Common, app-owned Navigation 3 shell. It is the only component that mutates the shared stack;
- * entry ViewModels express navigation exclusively as Orbit one-shot side effects.
- */
+/** Common owner of the one Nav3 stack for both platforms and every typed dialog result. */
 @Composable
 internal fun Navigation3AppHost(
     appTitle: String,
     navigationEvents: AppNavigationEventBridge,
 ) {
-    val settingsCapability = rememberAppSettingsCapability()
     val snapshotStore = rememberNavigationRouteSnapshotStore()
-    val restoredSnapshot = remember(snapshotStore) {
-        NavigationRouteSnapshotCodec.restore(snapshotStore.read())
-    }
-    val backStack = rememberNavBackStack(
-        navigationSavedStateConfiguration,
-        *restoredSnapshot.routes.toTypedArray(),
-    )
-    var pendingDialogDelivery by remember { mutableStateOf<DialogResultDelivery?>(null) }
-    var visibleDialogResult by remember { mutableStateOf<NavigationDialogResult?>(null) }
+    val restored = remember(snapshotStore) { NavigationRouteSnapshotCodec.restore(snapshotStore.read()) }
+    val backStack = rememberNavBackStack(navigationSavedStateConfiguration, *restored.routes.toTypedArray())
+    var pendingResult by remember { mutableStateOf<DialogResultDelivery?>(null) }
+    var confirmDeleteDismissalLock by remember { mutableStateOf(ConfirmDeleteDismissalLock.UNLOCKED) }
     val navigator = remember(backStack, snapshotStore) {
         AppNavigator(
             backStack = backStack,
             snapshotStore = snapshotStore,
-            onDialogResult = { delivery -> pendingDialogDelivery = delivery },
+            onDialogResult = { pendingResult = it },
+            confirmDeleteDismissalLock = { confirmDeleteDismissalLock },
             onNavigationStarted = {
-                pendingDialogDelivery = null
-                visibleDialogResult = null
+                pendingResult = null
+                confirmDeleteDismissalLock = ConfirmDeleteDismissalLock.UNLOCKED
             },
         )
     }
     val navigationEvent = navigationEvents.latestEvent
 
-    LaunchedEffect(restoredSnapshot.shouldClearStoredSnapshot, snapshotStore) {
-        if (restoredSnapshot.shouldClearStoredSnapshot) {
-            snapshotStore.clear()
-        }
+    LaunchedEffect(restored.shouldClearStoredSnapshot, snapshotStore) {
+        if (restored.shouldClearStoredSnapshot) snapshotStore.clear()
     }
     LaunchedEffect(navigationEvent?.id) {
         navigationEvent?.let { event ->
@@ -89,328 +82,297 @@ internal fun Navigation3AppHost(
         }
     }
     LaunchedEffect(navigationEvents, navigator) {
-        navigationEvents.backRequests.collect {
-            withContext(NonCancellable) { navigator.onBack() }
-        }
+        navigationEvents.backRequests.collect { withContext(NonCancellable) { navigator.onBack() } }
     }
-    val entryDecorators = listOf(
-        rememberSaveableStateHolderNavEntryDecorator<NavKey>(),
+
+    val decorators = listOf(
+        androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator<NavKey>(),
         rememberViewModelStoreNavEntryDecorator<NavKey>(),
     )
-    val entries = remember(
-        appTitle,
-        navigator,
-        settingsCapability,
-        pendingDialogDelivery,
-        visibleDialogResult,
-    ) {
+    val entries = remember(appTitle, navigator, pendingResult) {
         entryProvider<NavKey> {
             entry<AppDestination.Gallery> {
-                val viewModel: ComponentGalleryViewModel = navigationEntryViewModel(key = "gallery")
-
-                ComponentGalleryScreen(
-                    appTitle = appTitle,
+                val viewModel: ExperimentListViewModel = navigationEntryViewModel(key = "experiment-list")
+                ExperimentListScreen(
                     viewModel = viewModel,
                     isNavigationActionAllowed = rememberIsNavigationActionAllowed(),
-                    handleNavigationAction = navigator::handleGalleryEffect,
+                    handleNavigationAction = navigator::handleListEffect,
                 )
             }
             entry<AppDestination.Experiment> { route ->
-                val viewModel: NavigationExperimentViewModel = navigationEntryViewModel(
-                    key = "experiment:${route.experimentId.value}",
-                    route.experimentId,
+                val viewModel: ExperimentDetailsViewModel = navigationEntryViewModel(
+                    key = "experiment-details:${route.experimentId.value}", route.experimentId,
                 )
-                val delivery = pendingDialogDelivery?.takeIf { candidate ->
-                    candidate.experimentId == route.experimentId && backStack.lastOrNull() == route
-                }
-
-                NavigationExperimentScreen(
+                val delivery = pendingResult?.takeIf { it.caller == route }
+                val deleteResult = (delivery?.result as? DialogResult.Delete)?.value
+                ExperimentDetailsScreen(
                     viewModel = viewModel,
-                    deliveredDialogResult = delivery?.result,
-                    dialogResult = visibleDialogResult.displayFor(route.experimentId),
+                    deliveredDeleteResult = deleteResult,
+                    onDeleteResultConsumed = {
+                        if (pendingResult?.id == delivery?.id) pendingResult = null
+                    },
                     isNavigationActionAllowed = rememberIsNavigationActionAllowed(),
-                    onDialogResultConsumed = {
-                        if (pendingDialogDelivery?.id == delivery?.id) {
-                            pendingDialogDelivery = null
+                    handleNavigationAction = { navigator.handleDetailsEffect(route, it) },
+                )
+            }
+            entry<AppDestination.ExperimentEditor> { route ->
+                val viewModel: ExperimentEditorViewModel = navigationEntryViewModel(
+                    key = "experiment-editor:${route.experimentId?.value ?: "new"}",
+                    ExperimentEditorEntryArguments(route.experimentId),
+                )
+                val delivery = pendingResult?.takeIf { it.caller == route }
+                val metricResult = (delivery?.result as? DialogResult.Metric)?.value
+                ExperimentEditorScreen(
+                    viewModel = viewModel,
+                    deliveredMetricResult = metricResult,
+                    onMetricResultConsumed = {
+                        if (pendingResult?.id == delivery?.id) pendingResult = null
+                    },
+                    isNavigationActionAllowed = rememberIsNavigationActionAllowed(),
+                    handleNavigationAction = { navigator.handleEditorEffect(route, it) },
+                )
+            }
+            entry<AppDestination.DailyCheckIn> { route ->
+                val viewModel: DailyCheckInViewModel = navigationEntryViewModel(
+                    key = "daily-check-in:${route.experimentId.value}:${route.localDate.value}",
+                    route.experimentId,
+                    route.localDate.toLocalDate(),
+                )
+                DailyCheckInScreen(
+                    viewModel = viewModel,
+                    isNavigationActionAllowed = rememberIsNavigationActionAllowed(),
+                    handleNavigationAction = { navigator.handleCheckInEffect(route, it) },
+                )
+            }
+            entry<AppDestination.Settings> {
+                val viewModel: SettingsViewModel = navigationEntryViewModel(key = "settings")
+                SettingsScreen(
+                    viewModel = viewModel,
+                    isNavigationActionAllowed = rememberIsNavigationActionAllowed(),
+                    handleNavigationAction = navigator::handleSettingsEffect,
+                )
+            }
+            entry<AppDestination.MetricPicker>(metadata = { DialogSceneStrategy.dialog() }) { route ->
+                val viewModel: MetricPickerViewModel = navigationEntryViewModel(
+                    key = "metric-picker:${route.experimentId?.value ?: "new"}",
+                    MetricPickerEntryArguments(route.experimentId),
+                )
+                MetricPickerScreen(
+                    viewModel = viewModel,
+                    isNavigationActionAllowed = rememberIsNavigationActionAllowed(),
+                    handleNavigationAction = { navigator.handleMetricPickerEffect(route, it) },
+                )
+            }
+            entry<AppDestination.ConfirmDelete>(metadata = { DialogSceneStrategy.dialog() }) { route ->
+                val viewModel: ConfirmDeleteViewModel = navigationEntryViewModel(
+                    key = "confirm-delete:${route.experimentId.value}", route.experimentId,
+                )
+                ConfirmDeleteScreen(
+                    viewModel = viewModel,
+                    onDismissalLockChanged = { isLocked ->
+                        if (backStack.lastOrNull() == route) {
+                            confirmDeleteDismissalLock = if (isLocked) {
+                                ConfirmDeleteDismissalLock.LOCKED
+                            } else {
+                                ConfirmDeleteDismissalLock.UNLOCKED
+                            }
                         }
                     },
-                    openApplicationSettings = settingsCapability::openApplicationSettings,
-                    handleNavigationAction = { effect ->
-                        navigator.handleExperimentEffect(route, effect)?.let { result ->
-                            visibleDialogResult = result
-                        }
-                    },
-                )
-            }
-            entry<AppDestination.FlowStepOne> { route ->
-                val viewModel: NavigationFlowStepOneViewModel = navigationEntryViewModel(
-                    key = "flow-step-one:${route.flowId.value}",
-                    route.flowId,
-                )
-
-                NavigationFlowStepOneScreen(
-                    viewModel = viewModel,
                     isNavigationActionAllowed = rememberIsNavigationActionAllowed(),
-                    handleNavigationAction = { effect ->
-                        navigator.handleFlowStepOneEffect(route, effect)
-                    },
-                )
-            }
-            entry<AppDestination.FlowStepTwo> { route ->
-                val viewModel: NavigationFlowStepTwoViewModel = navigationEntryViewModel(
-                    key = "flow-step-two:${route.flowId.value}",
-                    route.flowId,
-                )
-
-                NavigationFlowStepTwoScreen(
-                    viewModel = viewModel,
-                    isNavigationActionAllowed = rememberIsNavigationActionAllowed(),
-                    handleNavigationAction = { effect ->
-                        navigator.handleFlowStepTwoEffect(route, effect)
-                    },
-                )
-            }
-            entry<AppDestination.ConfirmExperiment>(
-                metadata = { DialogSceneStrategy.dialog() },
-            ) { route ->
-                val viewModel: NavigationConfirmationDialogViewModel = navigationEntryViewModel(
-                    key = "confirm-experiment:${route.experimentId.value}",
-                    route.experimentId,
-                )
-
-                NavigationConfirmationDialogScreen(
-                    viewModel = viewModel,
-                    isNavigationActionAllowed = rememberIsNavigationActionAllowed(),
-                    handleNavigationAction = { effect ->
-                        navigator.handleConfirmationEffect(route, effect)
-                    },
+                    handleNavigationAction = { navigator.handleConfirmDeleteEffect(route, it) },
                 )
             }
         }
     }
-
     NavDisplay(
         backStack = backStack,
         onBack = navigationEvents::requestBack,
-        entryDecorators = entryDecorators,
+        entryDecorators = decorators,
         sceneStrategies = listOf(DialogSceneStrategy(), SinglePaneSceneStrategy()),
         entryProvider = entries,
     )
 }
 
-/** The complete set of serializable Nav3 keys. Routes contain only typed IDs, never ViewState. */
+/** Complete typed route set. Gallery is retained as the stable, safe root wire key. */
 @Serializable
 sealed interface AppDestination : NavKey {
-    @Serializable
-    data object Gallery : AppDestination
-
-    @Serializable
-    data class Experiment(val experimentId: ExperimentId) : AppDestination
-
-    @Serializable
-    data class FlowStepOne(val flowId: FlowId) : AppDestination
-
-    @Serializable
-    data class FlowStepTwo(val flowId: FlowId) : AppDestination
-
-    @Serializable
-    data class ConfirmExperiment(val experimentId: ExperimentId) : AppDestination
+    @Serializable data object Gallery : AppDestination
+    @Serializable data class Experiment(val experimentId: ExperimentId) : AppDestination
+    @Serializable data class ExperimentEditor(val experimentId: ExperimentId?) : AppDestination
+    @Serializable data class DailyCheckIn(val experimentId: ExperimentId, val localDate: CheckInRouteDate) : AppDestination
+    @Serializable data object Settings : AppDestination
+    @Serializable data class MetricPicker(val experimentId: ExperimentId?) : AppDestination
+    @Serializable data class ConfirmDelete(val experimentId: ExperimentId) : AppDestination
 }
 
-/** Source-compatible factory for the typed navigation result now owned by presentation. */
-object ExperimentDialogResult {
-    fun Confirmed(experimentId: ExperimentId): NavigationDialogResult =
-        NavigationDialogResult.Confirmed(experimentId)
+/** Serializable value object for LocalDate-compatible route persistence without a UI snapshot. */
+@Serializable
+data class CheckInRouteDate(val value: String) {
+    init { require(runCatching { LocalDate.parse(value) }.isSuccess) { "Invalid check-in local date: $value" } }
 
-    fun Cancelled(experimentId: ExperimentId): NavigationDialogResult =
-        NavigationDialogResult.Cancelled(experimentId)
+    fun toLocalDate(): LocalDate = LocalDate.parse(value)
+
+    companion object { fun from(localDate: LocalDate) = CheckInRouteDate(localDate.toString()) }
 }
 
-/** Common, host-safe signal for initial and repeated platform deep-link delivery. */
 class AppNavigationEventBridge {
     private var nextEventId = 0L
-    private var _latestEvent by mutableStateOf<ExternalNavigationEvent?>(null)
-    private val backRequestChannel = Channel<Unit>(Channel.UNLIMITED)
-
-    val latestEvent: ExternalNavigationEvent?
-        get() = _latestEvent
-
-    val backRequests: Flow<Unit> = backRequestChannel.receiveAsFlow()
-
-    fun accept(rawUrl: String?) {
-        nextEventId += 1
-        _latestEvent = ExternalNavigationEvent(id = nextEventId, rawUrl = rawUrl)
-    }
-
-    /** Clears only the event just handled, preserving a newer live URL delivered concurrently. */
-    fun consume(eventId: Long) {
-        if (_latestEvent?.id == eventId) {
-            _latestEvent = null
-        }
-    }
-
-    fun requestBack() {
-        check(backRequestChannel.trySend(Unit).isSuccess) { "Back request channel is unavailable" }
-    }
+    private var latest by mutableStateOf<ExternalNavigationEvent?>(null)
+    private val backChannel = Channel<Unit>(Channel.UNLIMITED)
+    val latestEvent: ExternalNavigationEvent? get() = latest
+    val backRequests: Flow<Unit> = backChannel.receiveAsFlow()
+    fun accept(rawUrl: String?) { nextEventId += 1; latest = ExternalNavigationEvent(nextEventId, rawUrl) }
+    fun consume(eventId: Long) { if (latest?.id == eventId) latest = null }
+    fun requestBack() { check(backChannel.trySend(Unit).isSuccess) { "Back request channel is unavailable" } }
 }
 
-data class ExternalNavigationEvent(
-    val id: Long,
-    val rawUrl: String?,
-)
+data class ExternalNavigationEvent(val id: Long, val rawUrl: String?)
 
-/** Strict allowlist for external URLs. Every nonmatching form deliberately returns to root. */
+/** External contract deliberately remains limited to the two shipped experiment identifiers. */
 object HabitLabDeepLink {
     private const val experimentPrefix = "habitlab://experiment/"
-
     fun parse(rawUrl: String?): AppDestination.Experiment? {
-        val encodedId = rawUrl
-            ?.takeIf { it.startsWith(experimentPrefix) }
-            ?.removePrefix(experimentPrefix)
-            ?.takeIf { value ->
-                value.isNotEmpty() && value.none { character ->
-                    character == '/' || character == '?' || character == '#'
-                }
-            }
+        val value = rawUrl?.takeIf { it.startsWith(experimentPrefix) }?.removePrefix(experimentPrefix)
+            ?.takeIf { it.isNotEmpty() && it.none { char -> char == '/' || char == '?' || char == '#' } }
             ?: return null
-
-        return ExperimentId.fromExternalValue(encodedId)?.let(AppDestination::Experiment)
+        return ExperimentId.fromExternalValue(value)?.let(AppDestination::Experiment)
     }
 }
 
-/** Result identity is scoped to the immediate caller after a dialog is popped, never a route field. */
-private data class DialogResultDelivery(
-    val id: Long,
-    val experimentId: ExperimentId,
-    val result: NavigationDialogResult,
-)
+/** Compatibility factory for the original confirmation result contract kept for DEN-10 callers. */
+object ExperimentDialogResult {
+    fun Confirmed(experimentId: ExperimentId): LegacyExperimentDialogResult =
+        LegacyExperimentDialogResult.Confirmed(experimentId)
+
+    fun Cancelled(experimentId: ExperimentId): LegacyExperimentDialogResult =
+        LegacyExperimentDialogResult.Cancelled(experimentId)
+}
+
+internal fun LegacyExperimentDialogResult?.displayFor(experimentId: ExperimentId): NavigationDialogResultDisplay? =
+    when (this?.takeIf { it.experimentId == experimentId }) {
+        is LegacyExperimentDialogResult.Confirmed -> NavigationDialogResultDisplay.Confirmed
+        is LegacyExperimentDialogResult.Cancelled -> NavigationDialogResultDisplay.Cancelled
+        null -> null
+    }
+
+private sealed interface DialogResult {
+    data class Metric(val value: MetricPickerResult) : DialogResult
+    data class Delete(val value: DeleteDialogResult) : DialogResult
+}
+
+private data class DialogResultDelivery(val id: Long, val caller: AppDestination, val result: DialogResult)
 
 private class AppNavigator(
     private val backStack: NavBackStack<NavKey>,
     private val snapshotStore: NavigationRouteSnapshotStore,
     private val onDialogResult: (DialogResultDelivery) -> Unit,
+    private val confirmDeleteDismissalLock: () -> ConfirmDeleteDismissalLock,
     private val onNavigationStarted: () -> Unit,
 ) {
-    private var nextDialogResultId = 0L
+    private var nextResultId = 0L
 
-    suspend fun handleGalleryEffect(effect: GalleryNavigationEffect) {
-        if (backStack.lastOrNull() != AppDestination.Gallery) {
-            return
-        }
+    suspend fun handleListEffect(effect: com.denis.habitlab.shared.presentation.experimentlist.NavigationEffect) {
+        if (backStack.lastOrNull() != AppDestination.Gallery) return
         when (effect) {
-            is GalleryNavigationEffect.OpenExperiment -> openExperiment(effect.experimentId)
-            GalleryNavigationEffect.StartFlow -> startGalleryFlow()
-            GalleryNavigationEffect.Back -> onBack()
+            is com.denis.habitlab.shared.presentation.experimentlist.NavigationEffect.OpenDetails -> openDetails(effect.experimentId)
+            com.denis.habitlab.shared.presentation.experimentlist.NavigationEffect.OpenCreateEditor -> add(AppDestination.ExperimentEditor(null))
+            com.denis.habitlab.shared.presentation.experimentlist.NavigationEffect.OpenSettings -> add(AppDestination.Settings)
         }
     }
 
-    suspend fun handleExperimentEffect(
+    suspend fun handleDetailsEffect(
         origin: AppDestination.Experiment,
-        effect: ExperimentNavigationEffect,
-    ): NavigationDialogResult? {
-        if (effect == ExperimentNavigationEffect.PopToRoot) {
-            if (origin in backStack) {
-                popToRoot()
-            }
-            return null
-        }
-        if (backStack.lastOrNull() != origin) {
-            return null
-        }
-        return when (effect) {
-            ExperimentNavigationEffect.Back -> {
-                onBack()
-                null
-            }
-            is ExperimentNavigationEffect.OpenConfirmation -> {
-                openConfirmation(effect.experimentId)
-                null
-            }
-            is ExperimentNavigationEffect.StartFlow -> {
-                startExperimentFlow(effect.experimentId)
-                null
-            }
-            is ExperimentNavigationEffect.DialogResultDelivered -> {
-                effect.result.takeIf { result -> acceptDialogResult(origin, result) }
-            }
-            ExperimentNavigationEffect.PopToRoot -> null
-        }
-    }
-
-    suspend fun handleFlowStepOneEffect(
-        origin: AppDestination.FlowStepOne,
-        effect: FlowStepOneNavigationEffect,
+        effect: com.denis.habitlab.shared.presentation.experimentdetails.NavigationEffect,
     ) {
-        if (effect == FlowStepOneNavigationEffect.PopToRoot) {
-            if (origin in backStack) {
-                popToRoot()
-            }
+        if (effect == com.denis.habitlab.shared.presentation.experimentdetails.NavigationEffect.PopToRoot) {
+            // A Room delete can make the underlying observer report Missing before its dialog's
+            // confirmed effect is delivered. Preserve the pop-then-result dialog invariant.
+            if (
+                backStack.lastOrNull() is AppDestination.ConfirmDelete &&
+                backStack.getOrNull(backStack.lastIndex - 1) == origin
+            ) return
+            if (origin in backStack) popToRoot()
             return
         }
-        if (backStack.lastOrNull() != origin) {
-            return
-        }
+        if (backStack.lastOrNull() != origin) return
         when (effect) {
-            FlowStepOneNavigationEffect.Back -> onBack()
-            is FlowStepOneNavigationEffect.Advance -> advanceFlow(effect.flowId)
-            FlowStepOneNavigationEffect.PopToRoot -> Unit
+            com.denis.habitlab.shared.presentation.experimentdetails.NavigationEffect.Back -> onBack()
+            is com.denis.habitlab.shared.presentation.experimentdetails.NavigationEffect.OpenEditor -> add(AppDestination.ExperimentEditor(effect.experimentId))
+            is com.denis.habitlab.shared.presentation.experimentdetails.NavigationEffect.OpenDailyCheckIn ->
+                add(AppDestination.DailyCheckIn(effect.experimentId, CheckInRouteDate.from(effect.localDate)))
+            is com.denis.habitlab.shared.presentation.experimentdetails.NavigationEffect.OpenConfirmDelete ->
+                add(AppDestination.ConfirmDelete(effect.experimentId))
+            com.denis.habitlab.shared.presentation.experimentdetails.NavigationEffect.PopToRoot -> Unit
         }
     }
 
-    suspend fun handleFlowStepTwoEffect(
-        origin: AppDestination.FlowStepTwo,
-        effect: FlowStepTwoNavigationEffect,
+    suspend fun handleEditorEffect(
+        origin: AppDestination.ExperimentEditor,
+        effect: com.denis.habitlab.shared.presentation.experimenteditor.NavigationEffect,
     ) {
-        if (effect == FlowStepTwoNavigationEffect.PopToRoot) {
-            if (origin in backStack) {
-                popToRoot()
-            }
+        if (effect == com.denis.habitlab.shared.presentation.experimenteditor.NavigationEffect.PopToRoot) {
+            if (origin in backStack) popToRoot()
             return
         }
-        if (backStack.lastOrNull() != origin) {
-            return
-        }
+        if (backStack.lastOrNull() != origin) return
         when (effect) {
-            FlowStepTwoNavigationEffect.Back -> onBack()
-            is FlowStepTwoNavigationEffect.Complete -> completeFlow(effect.flowId)
-            FlowStepTwoNavigationEffect.PopToRoot -> Unit
+            com.denis.habitlab.shared.presentation.experimenteditor.NavigationEffect.Back -> onBack()
+            is com.denis.habitlab.shared.presentation.experimenteditor.NavigationEffect.OpenMetricPicker ->
+                add(AppDestination.MetricPicker(effect.experimentId))
+            is com.denis.habitlab.shared.presentation.experimenteditor.NavigationEffect.SaveComplete -> completeEditor(origin, effect.experimentId)
+            com.denis.habitlab.shared.presentation.experimenteditor.NavigationEffect.PopToRoot -> Unit
         }
     }
 
-    suspend fun handleConfirmationEffect(
-        origin: AppDestination.ConfirmExperiment,
-        effect: ConfirmationNavigationEffect,
+    suspend fun handleCheckInEffect(
+        origin: AppDestination.DailyCheckIn,
+        effect: com.denis.habitlab.shared.presentation.dailycheckin.NavigationEffect,
     ) {
-        if (backStack.lastOrNull() != origin) {
-            return
-        }
-        when (effect) {
-            is ConfirmationNavigationEffect.Resolve -> resolveConfirmation(effect.result)
+        if (effect == com.denis.habitlab.shared.presentation.dailycheckin.NavigationEffect.PopToRoot) {
+            if (origin in backStack) popToRoot()
+        } else if (backStack.lastOrNull() == origin && effect == com.denis.habitlab.shared.presentation.dailycheckin.NavigationEffect.Back) {
+            onBack()
         }
     }
 
-    private suspend fun acceptDialogResult(
-        origin: AppDestination.Experiment,
-        result: NavigationDialogResult,
-    ): Boolean {
-        if (backStack.lastOrNull() == origin && result.experimentId == origin.experimentId) {
-            return true
+    suspend fun handleSettingsEffect(effect: com.denis.habitlab.shared.presentation.settings.NavigationEffect) {
+        if (backStack.lastOrNull() == AppDestination.Settings && effect == com.denis.habitlab.shared.presentation.settings.NavigationEffect.Back) onBack()
+    }
+
+    suspend fun handleMetricPickerEffect(
+        origin: AppDestination.MetricPicker,
+        effect: com.denis.habitlab.shared.presentation.metricpicker.NavigationEffect,
+    ) {
+        if (backStack.lastOrNull() == origin && effect is com.denis.habitlab.shared.presentation.metricpicker.NavigationEffect.Resolve) {
+            resolveMetric(origin, effect.result)
         }
-        popToRoot()
-        return false
+    }
+
+    suspend fun handleConfirmDeleteEffect(
+        origin: AppDestination.ConfirmDelete,
+        effect: com.denis.habitlab.shared.presentation.confirmdelete.NavigationEffect,
+    ) {
+        if (backStack.lastOrNull() == origin && effect is com.denis.habitlab.shared.presentation.confirmdelete.NavigationEffect.Resolve) {
+            resolveDelete(origin, effect.result)
+        }
     }
 
     suspend fun onBack() {
         when (val top = backStack.lastOrNull()) {
-            is AppDestination.ConfirmExperiment -> {
-                resolveConfirmation(NavigationDialogResult.Cancelled(top.experimentId))
+            is AppDestination.MetricPicker -> resolveMetric(top, MetricPickerResult.Cancelled(top.experimentId))
+            is AppDestination.ConfirmDelete -> {
+                when (ConfirmDeleteDismissalPolicy.decide(confirmDeleteDismissalLock())) {
+                    ConfirmDeleteDismissalDecision.Ignore -> Unit
+                    ConfirmDeleteDismissalDecision.ResolveCancelled -> {
+                        resolveDelete(top, DeleteDialogResult.Cancelled(top.experimentId))
+                    }
+                }
             }
-
             null, AppDestination.Gallery -> Unit
             else -> {
                 onNavigationStarted()
                 backStack.removeLast()
-                persistCompletedStack()
+                persist()
             }
         }
     }
@@ -419,112 +381,59 @@ private class AppNavigator(
         onNavigationStarted()
         replaceWithRoot()
         HabitLabDeepLink.parse(event.rawUrl)?.let(backStack::add)
-        persistCompletedStack()
+        persist()
     }
 
-    private suspend fun openExperiment(experimentId: ExperimentId) {
-        if (ExperimentId.fromInternalValue(experimentId.value) == null) {
-            popToRoot()
-            return
-        }
+    private suspend fun openDetails(experimentId: ExperimentId) {
+        if (ExperimentId.fromInternalValue(experimentId.value) == null) popToRoot() else add(AppDestination.Experiment(experimentId))
+    }
+
+    private suspend fun add(destination: AppDestination) {
         onNavigationStarted()
-        backStack += AppDestination.Experiment(experimentId)
-        persistCompletedStack()
+        backStack += destination
+        persist()
     }
 
-    private suspend fun startGalleryFlow() {
-        if (backStack.lastOrNull() != AppDestination.Gallery) {
-            popToRoot()
-            return
-        }
-        onNavigationStarted()
-        backStack += AppDestination.FlowStepOne(FlowId.gallerySetup())
-        persistCompletedStack()
-    }
-
-    private suspend fun startExperimentFlow(experimentId: ExperimentId) {
-        if (backStack.lastOrNull() != AppDestination.Experiment(experimentId)) {
-            popToRoot()
-            return
-        }
-        onNavigationStarted()
-        backStack += AppDestination.FlowStepOne(FlowId.forExperiment(experimentId))
-        persistCompletedStack()
-    }
-
-    private suspend fun advanceFlow(flowId: FlowId) {
-        if (!FlowId.isSupported(flowId) || backStack.lastOrNull() != AppDestination.FlowStepOne(flowId)) {
-            popToRoot()
-            return
-        }
-        onNavigationStarted()
-        backStack += AppDestination.FlowStepTwo(flowId)
-        persistCompletedStack()
-    }
-
-    private suspend fun completeFlow(flowId: FlowId) {
-        val expectedStepOne = AppDestination.FlowStepOne(flowId)
-        if (
-            backStack.lastOrNull() != AppDestination.FlowStepTwo(flowId) ||
-            backStack.getOrNull(backStack.lastIndex - 1) != expectedStepOne
-        ) {
-            popToRoot()
-            return
-        }
+    private suspend fun completeEditor(origin: AppDestination.ExperimentEditor, experimentId: ExperimentId) {
+        if (origin.experimentId != null && origin.experimentId != experimentId) { popToRoot(); return }
         onNavigationStarted()
         backStack.removeLast()
-        backStack.removeLast()
-        persistCompletedStack()
+        if (origin.experimentId == null) backStack += AppDestination.Experiment(experimentId)
+        persist()
     }
 
-    private suspend fun openConfirmation(experimentId: ExperimentId) {
-        if (backStack.lastOrNull() != AppDestination.Experiment(experimentId)) {
-            popToRoot()
-            return
-        }
-        onNavigationStarted()
-        backStack += AppDestination.ConfirmExperiment(experimentId)
-        persistCompletedStack()
+    private suspend fun resolveMetric(dialog: AppDestination.MetricPicker, result: MetricPickerResult) {
+        val caller = backStack.getOrNull(backStack.lastIndex - 1) as? AppDestination.ExperimentEditor
+        if (caller == null || caller.experimentId != dialog.experimentId || result.experimentId != dialog.experimentId) { popToRoot(); return }
+        resolve(caller, DialogResult.Metric(result))
     }
 
-    private suspend fun resolveConfirmation(result: NavigationDialogResult) {
-        val dialog = backStack.lastOrNull() as? AppDestination.ConfirmExperiment
+    private suspend fun resolveDelete(dialog: AppDestination.ConfirmDelete, result: DeleteDialogResult) {
         val caller = backStack.getOrNull(backStack.lastIndex - 1) as? AppDestination.Experiment
-        if (dialog?.experimentId != result.experimentId || caller?.experimentId != result.experimentId) {
-            popToRoot()
-            return
-        }
+        if (caller?.experimentId != dialog.experimentId || result.experimentId != dialog.experimentId) { popToRoot(); return }
+        resolve(caller, DialogResult.Delete(result))
+    }
+
+    private suspend fun resolve(caller: AppDestination, result: DialogResult) {
+        onNavigationStarted()
         backStack.removeLast()
-        nextDialogResultId += 1
-        onDialogResult(
-            DialogResultDelivery(
-                id = nextDialogResultId,
-                experimentId = caller.experimentId,
-                result = result,
-            ),
-        )
-        persistCompletedStack()
+        nextResultId += 1
+        onDialogResult(DialogResultDelivery(nextResultId, caller, result))
+        persist()
     }
 
     private suspend fun popToRoot() {
         onNavigationStarted()
         replaceWithRoot()
-        persistCompletedStack()
+        persist()
     }
 
-    private fun replaceWithRoot() {
-        backStack.clear()
-        backStack += AppDestination.Gallery
-    }
+    private fun replaceWithRoot() { backStack.clear(); backStack += AppDestination.Gallery }
 
-    /** Persists only complete, validated post-operation stacks; transient removals are never saved. */
-    private suspend fun persistCompletedStack() = withContext(NonCancellable) {
-        val destinations = backStack.map { it as? AppDestination }
-        if (destinations.any { it == null }) {
-            snapshotStore.clear()
-        } else {
-            NavigationRouteSnapshotCodec.persist(snapshotStore, destinations.filterNotNull())
-        }
+    private suspend fun persist() = withContext(NonCancellable) {
+        val routes = backStack.map { it as? AppDestination }
+        if (routes.any { it == null }) snapshotStore.clear()
+        else NavigationRouteSnapshotCodec.persist(snapshotStore, routes.filterNotNull())
     }
 }
 
@@ -533,21 +442,11 @@ private val navigationSavedStateConfiguration = SavedStateConfiguration {
         polymorphic(NavKey::class) {
             subclass(AppDestination.Gallery::class, AppDestination.Gallery.serializer())
             subclass(AppDestination.Experiment::class, AppDestination.Experiment.serializer())
-            subclass(AppDestination.FlowStepOne::class, AppDestination.FlowStepOne.serializer())
-            subclass(AppDestination.FlowStepTwo::class, AppDestination.FlowStepTwo.serializer())
-            subclass(
-                AppDestination.ConfirmExperiment::class,
-                AppDestination.ConfirmExperiment.serializer(),
-            )
+            subclass(AppDestination.ExperimentEditor::class, AppDestination.ExperimentEditor.serializer())
+            subclass(AppDestination.DailyCheckIn::class, AppDestination.DailyCheckIn.serializer())
+            subclass(AppDestination.Settings::class, AppDestination.Settings.serializer())
+            subclass(AppDestination.MetricPicker::class, AppDestination.MetricPicker.serializer())
+            subclass(AppDestination.ConfirmDelete::class, AppDestination.ConfirmDelete.serializer())
         }
     }
 }
-
-private fun NavigationDialogResult.toDisplay(): NavigationDialogResultDisplay = when (this) {
-    is NavigationDialogResult.Confirmed -> NavigationDialogResultDisplay.Confirmed
-    is NavigationDialogResult.Cancelled -> NavigationDialogResultDisplay.Cancelled
-}
-
-internal fun NavigationDialogResult?.displayFor(
-    experimentId: ExperimentId,
-): NavigationDialogResultDisplay? = takeIf { it?.experimentId == experimentId }?.toDisplay()

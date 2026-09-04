@@ -88,6 +88,13 @@ External `habitlab://` deep links remain an exact allowlist for only `daily-move
 `sleep-routine`; internal `draft-*` IDs are accepted only by internal navigation and route restore.
 Routes contain IDs only, never Room/entity/domain screen state.
 
+DEN-12's common Daily Check-in screen supplies the typed user intent (`PERFORMED` or `SKIPPED`) and
+the route's typed local date to `RecordDailyCheckIn`. The interactor owns time construction: it always
+records the submission timestamp separately, creates a factual `OccurredAt` only for `PERFORMED`, and
+rejects a performed write when the supplied day no longer matches the clock-derived factual day.
+`SKIPPED` deliberately creates no occurrence. Compose and ViewModels do not read a clock or construct
+time-bearing domain values.
+
 ## v1 limits
 
 The v1 database is unencrypted. Android backup is disabled and iOS database files are excluded from

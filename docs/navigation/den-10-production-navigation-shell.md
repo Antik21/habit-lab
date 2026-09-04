@@ -5,7 +5,9 @@
 `shared.app.Navigation3AppHost` owns the single Navigation 3 back stack for Android and iOS. It is
 the only code that pushes, pops, pops to root, opens a dialog, or resolves a dialog result.
 `AppDestination` is the complete sealed serializable route set and contains only `ExperimentId` or
-`FlowId` values.
+a validated typed local-date value. DEN-12 keeps `Gallery` as the stable safe-root wire key while
+rendering the real Experiment List there; its internal routes are Details, Editor, Daily Check-in,
+Settings, Metric Picker, and Confirm Delete.
 
 Every Nav3 entry is wrapped by the saved-state and ViewModel-store decorators. The app composition
 boundary then resolves a common AndroidX ViewModel from Koin for that entry. Each entry ViewModel has
@@ -23,11 +25,12 @@ no destination restores serialized screen state.
 
 ## Dialog and safety behavior
 
-Confirmation routes do not contain a result or caller stack. Confirm, explicit cancel, Android system
+Dialog routes do not contain a result or caller stack. Confirm, explicit cancel, Android system
 back, and the iOS leading-edge bridge all resolve through the common host. The dialog is popped first,
-then a typed confirmed/cancelled result is queued for its immediate matching experiment caller before
-the final route snapshot is awaited. After recomposition, the caller ViewModel receives it as an Orbit
-side effect. The result is not a route field or `ViewState` value.
+then a typed result is queued for its immediate matching Details or Editor caller before the final
+route snapshot is awaited. After recomposition, the caller receives the one-shot result; it is not a
+route field or `ViewState` value. Confirm Delete executes the narrow domain delete command before
+emitting its confirmed result.
 
 External URLs accept only the two allowlisted experiment IDs. Stale effects from entries already
 removed from the stack are ignored; bad URLs, unsupported flow IDs, malformed dialogs, and impossible
@@ -40,7 +43,7 @@ URL has a new ID and is processed normally.
 
 ## Route-only restoration
 
-The version 1 common snapshot stores only a valid ordered list of routes/typed IDs. The one
+The version 2 common snapshot stores only a valid ordered list of routes/typed IDs. The one
 `AppNavigator` saves the final validated list immediately after every completed mutation, including
 external navigation, dialog pop/result delivery, back, root fallback, and multi-step flow completion;
 it never writes an intermediate state while an operation removes then adds entries. Android performs
@@ -50,11 +53,11 @@ synchronous during composition. If a replacement fails, it attempts to delete th
 executor before returning. iOS writes the same payload behind `NSUserDefaults`. Normal Android Activity
 recreation also continues to use Navigation 3's saved-state configuration.
 
-The restore codec rejects and clears corrupt JSON, unknown versions, unknown experiment IDs,
-overlong lists, unpaired flow steps, and dialogs without their matching caller; it then starts at
-Gallery. `ViewState`, observer projections, and completed dialog results are excluded. Entries re-read
-their projection after restoration. A dialog visible at process interruption restores only as a valid
-dialog route; no half-delivered outcome is replayed.
+The restore codec rejects and clears corrupt JSON, unknown versions, unknown experiment IDs or local
+dates, overlong lists, invalid parent/child route pairs, and dialogs without their matching caller;
+it then starts at Gallery. `ViewState`, observer projections, and completed dialog results are
+excluded. Entries re-read their projection after restoration. A dialog visible at process interruption
+restores only as a valid dialog route; no half-delivered outcome is replayed.
 
 Storage durability is best-effort only when a platform cannot commit both a write and a subsequent
 cleanup. Any surviving payload is still structurally validated during restore and safely falls back
