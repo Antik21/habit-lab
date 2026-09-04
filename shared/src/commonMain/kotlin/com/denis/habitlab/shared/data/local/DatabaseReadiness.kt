@@ -3,7 +3,6 @@ package com.denis.habitlab.shared.data.local
 import com.denis.habitlab.shared.domain.repository.StorageFailure
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.first
 
 /**
  * Host-bootstrap gate for database observers.
@@ -23,9 +22,6 @@ internal class DatabaseReadiness(initialState: DatabaseReadinessState) {
     private val mutableState = MutableStateFlow(initialState)
 
     val state: StateFlow<DatabaseReadinessState> = mutableState
-
-    suspend fun awaitTerminalState(): DatabaseReadinessState =
-        state.first { it !is DatabaseReadinessState.Initializing }
 
     fun markReady() {
         mutableState.value = DatabaseReadinessState.Ready

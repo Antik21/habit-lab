@@ -10,9 +10,11 @@ import kotlinx.coroutines.CancellationException
  */
 class DebugExperimentDatabaseControl internal constructor(
     private val localDataSource: RoomExperimentLocalDataSource,
+    private val onSuccessfulReset: () -> Unit = {},
 ) {
     suspend fun resetAndSeed(): DebugDatabaseResetResult = try {
         localDataSource.resetAndSeed()
+        onSuccessfulReset()
         DebugDatabaseResetResult.Reset
     } catch (cancellation: CancellationException) {
         throw cancellation

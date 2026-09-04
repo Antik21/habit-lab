@@ -16,9 +16,12 @@ import com.denis.habitlab.shared.domain.observer.ExperimentProjectionObserver
 import com.denis.habitlab.shared.domain.repository.StorageFailure
 import com.denis.habitlab.shared.domain.repository.StorageOperation
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.filterNot
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.datetime.LocalDate
@@ -112,11 +115,14 @@ internal class RoomExperimentObservers(
         }
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     private fun <T> afterDatabaseReady(
         observeAfterReady: suspend kotlinx.coroutines.flow.FlowCollector<T>.(DatabaseReadinessState) -> Unit,
-    ): Flow<T> = flow {
-        observeAfterReady(databaseReadiness.awaitTerminalState())
-    }
+    ): Flow<T> = databaseReadiness.state
+        .filterNot { it is DatabaseReadinessState.Initializing }
+        .flatMapLatest { readiness ->
+            flow { observeAfterReady(readiness) }
+        }
 }
 
 /** Converts only recoverable storage failures; coroutine cancellation and fatal errors stay visible. */

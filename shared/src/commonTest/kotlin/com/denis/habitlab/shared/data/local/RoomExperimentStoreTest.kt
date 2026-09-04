@@ -21,9 +21,13 @@ import com.denis.habitlab.shared.domain.repository.EditDraftResult
 import com.denis.habitlab.shared.domain.repository.RecordDailyCheckInResult
 import com.denis.habitlab.shared.domain.repository.StorageFailure
 import com.denis.habitlab.shared.domain.repository.StorageOperation
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.UtcOffset
@@ -201,22 +205,69 @@ class RoomExperimentStoreTest {
     }
 
     @Test
-    fun debugReadinessFailureIsObservedAsTypedStorageFailure() = runBlocking {
+    fun activeObserverRecoversFailedReadinessWithFixedFixtureAfterDebugReset() = runBlocking {
         val database = inMemoryDatabase()
         try {
-            val failure = StorageFailure(StorageOperation.DEBUG_SEED)
-            val readiness = DatabaseReadiness(DatabaseReadinessState.Initializing)
+            val transientSeedFailure = StorageFailure(StorageOperation.DEBUG_SEED)
+            val readiness = DatabaseReadiness(DatabaseReadinessState.Failed(transientSeedFailure))
             val observers = RoomExperimentObservers(
                 localDataSource = RoomExperimentLocalDataSource(database),
                 databaseReadiness = readiness,
             )
-
-            readiness.markFailed(failure)
-
-            assertEquals(
-                ExperimentListObservation.Failed(failure),
-                observers.observeAll().first(),
+            val control = DebugExperimentDatabaseControl(
+                localDataSource = RoomExperimentLocalDataSource(database),
+                onSuccessfulReset = readiness::markReady,
             )
+            val failureObserved = CompletableDeferred<Unit>()
+            val observations = async(start = CoroutineStart.UNDISPATCHED) {
+                observers.observeAll()
+                    .onEach { observation ->
+                        if (observation == ExperimentListObservation.Failed(transientSeedFailure)) {
+                            failureObserved.complete(Unit)
+                        }
+                    }
+                    .take(2)
+                    .toList()
+            }
+
+            failureObserved.await()
+            assertEquals(DebugDatabaseResetResult.Reset, control.resetAndSeed())
+            assertEquals(DatabaseReadinessState.Ready, readiness.state.value)
+            val recoveredObservations = observations.await()
+            assertEquals(
+                ExperimentListObservation.Failed(transientSeedFailure),
+                recoveredObservations.first(),
+            )
+            assertEquals(2, recoveredObservations.size)
+            assertEquals(
+                listOf("daily-movement", "sleep-routine"),
+                assertIs<ExperimentListObservation.Available>(recoveredObservations[1])
+                    .experiments
+                    .map { it.id.value },
+            )
+            assertEquals(
+                DailyCheckInObservation.Available(DebugSeed.fixed.checkIns.first().toDomain()),
+                observers.observe(ExperimentId("daily-movement"), LocalDate.parse("2026-01-02")).first(),
+            )
+        } finally {
+            database.close()
+        }
+    }
+
+    @Test
+    fun failedDebugResetDoesNotMarkReadinessReady() = runBlocking {
+        val database = inMemoryDatabase()
+        val transientSeedFailure = StorageFailure(StorageOperation.DEBUG_SEED)
+        val readiness = DatabaseReadiness(DatabaseReadinessState.Failed(transientSeedFailure))
+        val control = DebugExperimentDatabaseControl(
+            localDataSource = RoomExperimentLocalDataSource(database),
+            onSuccessfulReset = readiness::markReady,
+        )
+        try {
+            database.close()
+
+            assertIs<DebugDatabaseResetResult.Failed>(control.resetAndSeed())
+            assertEquals(DatabaseReadinessState.Failed(transientSeedFailure), readiness.state.value)
         } finally {
             database.close()
         }

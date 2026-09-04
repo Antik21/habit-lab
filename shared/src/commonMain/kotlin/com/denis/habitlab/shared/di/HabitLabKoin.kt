@@ -122,7 +122,13 @@ private fun habitLabModule(
     single { EditExperimentDraft(repository = get(), recordedAtSource = get()) }
     single { RecordDailyCheckIn(repository = get(), recordedAtSource = get()) }
     if (isDebugBuild) {
-        single { DebugExperimentDatabaseControl(localDataSource = get()) }
+        single {
+            val databaseReadiness: DatabaseReadiness = get()
+            DebugExperimentDatabaseControl(
+                localDataSource = get(),
+                onSuccessfulReset = databaseReadiness::markReady,
+            )
+        }
         single { DebugDatabaseBootstrap(debugDatabaseControl = get(), databaseReadiness = get()) }
     }
     single<AppMetadataRepository> {

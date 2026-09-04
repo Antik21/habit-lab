@@ -47,7 +47,9 @@ fixed check-in for each. The performed daily movement fixture has an occurrence;
 fixture deliberately has no occurrence columns. It never replaces a nonempty database, so closing
 and reopening the debug app preserves user writes. `resetAndSeed()` is the explicit QA operation:
 it clears dependent check-ins first, clears experiments, and inserts the same fixed dataset in one
-Room transaction.
+Room transaction. If startup had reported a typed seed failure, a later successful reset transitions
+that same runtime's readiness gate to ready so existing observers resume; a failed reset leaves the
+existing readiness state unchanged.
 
 For Android exploratory QA, obtain the application instance and invoke its explicit
 `debugDatabaseControl?.resetAndSeed()` from a debug-only harness or debugger coroutine. On iOS,
