@@ -182,6 +182,7 @@ class ArchitectureBoundaryCheckerTest {
             "androidx.lifecycle.viewmodel.CreationExtras" to "nested lifecycle API",
             "androidx . lifecycle.SavedStateHandle" to "whitespace-split lifecycle API",
             "androidx./* split */lifecycle.SavedStateHandle" to "comment-split lifecycle API",
+            "`androidx`.lifecycle.SavedStateHandle" to "escaped lifecycle package API",
         )
 
         forbiddenReferences.forEach { (reference, description) ->
