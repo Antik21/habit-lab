@@ -1,6 +1,6 @@
 package com.denis.habitlab.shared.app
 
-import com.denis.habitlab.shared.presentation.navigation.NavigationDialogResultDisplay
+import com.denis.habitlab.shared.presentation.navigation.experiment.NavigationDialogResultDisplay
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking

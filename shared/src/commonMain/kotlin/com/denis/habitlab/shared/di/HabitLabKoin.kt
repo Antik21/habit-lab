@@ -25,10 +25,13 @@ import com.denis.habitlab.shared.domain.observer.ExperimentProjectionObserver
 import com.denis.habitlab.shared.domain.repository.AppMetadataRepository
 import com.denis.habitlab.shared.domain.repository.ExperimentRepository
 import com.denis.habitlab.shared.presentation.AppPresenter
-import com.denis.habitlab.shared.presentation.navigation.ConfirmationDialogEntryViewModel
-import com.denis.habitlab.shared.presentation.navigation.ExperimentEntryViewModel
-import com.denis.habitlab.shared.presentation.navigation.FlowEntryViewModel
-import com.denis.habitlab.shared.presentation.navigation.GalleryEntryViewModel
+import com.denis.habitlab.shared.presentation.gallery.ComponentGalleryUiMapper
+import com.denis.habitlab.shared.presentation.gallery.ComponentGalleryViewModel
+import com.denis.habitlab.shared.presentation.navigation.confirmation.NavigationConfirmationDialogViewModel
+import com.denis.habitlab.shared.presentation.navigation.experiment.NavigationExperimentViewModel
+import com.denis.habitlab.shared.presentation.navigation.experiment.NavigationExperimentUiMapper
+import com.denis.habitlab.shared.presentation.navigation.flow.stepone.NavigationFlowStepOneViewModel
+import com.denis.habitlab.shared.presentation.navigation.flow.steptwo.NavigationFlowStepTwoViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -138,13 +141,24 @@ private fun habitLabModule(
     }
     single { GetAppMetadata(repository = get()) }
     factory { AppPresenter(getAppMetadata = get()) }
-    factory { GalleryEntryViewModel(experimentListObserver = get()) }
-    factory { parameters ->
-        ExperimentEntryViewModel(
-            experimentId = parameters.get(),
-            projectionObserver = get(),
+    factory { ComponentGalleryUiMapper() }
+    factory {
+        ComponentGalleryViewModel(
+            experimentListObserver = get(),
+            uiMapper = get(),
         )
     }
-    factory { parameters -> FlowEntryViewModel(flowId = parameters.get()) }
-    factory { parameters -> ConfirmationDialogEntryViewModel(experimentId = parameters.get()) }
+    factory { NavigationExperimentUiMapper() }
+    factory { parameters ->
+        NavigationExperimentViewModel(
+            experimentId = parameters.get(),
+            projectionObserver = get(),
+            uiMapper = get(),
+        )
+    }
+    factory { parameters -> NavigationFlowStepOneViewModel(flowId = parameters.get()) }
+    factory { parameters -> NavigationFlowStepTwoViewModel(flowId = parameters.get()) }
+    factory { parameters ->
+        NavigationConfirmationDialogViewModel(experimentId = parameters.get())
+    }
 }

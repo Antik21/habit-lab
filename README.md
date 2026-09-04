@@ -36,11 +36,12 @@ The app uses the Compose Multiplatform artifact
 state without the Android reflection overload. There is one `NavDisplay`; the dialog is a `DialogSceneStrategy` overlay
 and the two-step flow is represented by entries in that same stack.
 
-The host collects one-shot Orbit side effects from entry-scoped common AndroidX ViewModels and is the
-only code that mutates the app-owned Nav3 stack. Koin resolves ViewModels at the navigation entry
-composition boundary after Nav3 saved-state and ViewModel-store decorators establish ownership.
+Each screen collects state and one-shot Orbit side effects from its entry-scoped common AndroidX
+ViewModel, handles view effects locally, and forwards typed navigation effects to the host. The host
+is the only code that mutates the app-owned Nav3 stack. Koin resolves ViewModels at the navigation
+entry composition boundary after Nav3 saved-state and ViewModel-store decorators establish ownership.
 Routes carry typed IDs only; an experiment re-reads its current projection through a domain observer,
-so `UiState` and screen data are never serialized into a route.
+so `ViewState` and screen data are never serialized into a route.
 
 A versioned common route snapshot persists the final validated stack after every completed navigation
 operation through `SharedPreferences` on Android and `NSUserDefaults` on iOS. Android serializes

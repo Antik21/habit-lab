@@ -314,16 +314,18 @@ class ArchitectureBoundaryChecker {
         packageName == "$sharedRootPackage.app" &&
             source.relativePath == navigationEntryKoinCompositionPath
 
-    /**
-     * Common AndroidX ViewModels are a deliberate presentation boundary for Nav3 entries. Keep the
-     * exception file-scoped so screens cannot acquire arbitrary lifecycle/platform dependencies.
-     */
-    private fun isLifecyclePresentationEntry(source: ArchitectureSource, packageName: String): Boolean =
-        packageName == "$sharedRootPackage.presentation.navigation" &&
-            source.relativePath == navigationEntryViewModelsPath
+    /** Common AndroidX lifecycle is allowed only in explicitly named presentation ViewModel files. */
+    private fun isLifecyclePresentationViewModel(
+        source: ArchitectureSource,
+        packageName: String,
+    ): Boolean =
+        (
+            packageName == "$sharedRootPackage.presentation" ||
+                packageName.startsWith("$sharedRootPackage.presentation.")
+        ) && presentationViewModelPath.matches(source.relativePath)
 
     /**
-     * The exact Nav3 entry ViewModel file may use its common AndroidX ViewModel lifecycle only.
+     * Presentation ViewModel files may use their common AndroidX ViewModel lifecycle only.
      * Other presentation infrastructure (native APIs, networking, databases, or lifecycle APIs
      * beyond this narrow owner/scope pair) must continue to fail the standard boundary check.
      */
@@ -331,7 +333,7 @@ class ArchitectureBoundaryChecker {
         source: ArchitectureSource,
         packageName: String,
         reference: String,
-    ): Boolean = isLifecyclePresentationEntry(source, packageName) &&
+    ): Boolean = isLifecyclePresentationViewModel(source, packageName) &&
         reference in navigationEntryLifecycleReferences
 
     private companion object {
@@ -361,8 +363,9 @@ class ArchitectureBoundaryChecker {
         val koinReference = Regex("(?<![A-Za-z0-9_.])org\\.koin\\.")
         const val navigationEntryKoinCompositionPath =
             "src/commonMain/kotlin/com/denis/habitlab/shared/app/NavigationEntryKoinComposition.kt"
-        const val navigationEntryViewModelsPath =
-            "src/commonMain/kotlin/com/denis/habitlab/shared/presentation/navigation/NavigationEntryViewModels.kt"
+        val presentationViewModelPath = Regex(
+            "src/commonMain/kotlin/com/denis/habitlab/shared/presentation/(?:[A-Za-z0-9_]+/)*[A-Za-z0-9_]+ViewModel\\.kt",
+        )
         val navigationEntryLifecycleReferences = setOf(
             "androidx.lifecycle.ViewModel",
             "androidx.lifecycle.viewModelScope",

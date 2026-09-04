@@ -9,10 +9,14 @@ the only code that pushes, pops, pops to root, opens a dialog, or resolves a dia
 
 Every Nav3 entry is wrapped by the saved-state and ViewModel-store decorators. The app composition
 boundary then resolves a common AndroidX ViewModel from Koin for that entry. Each entry ViewModel has
-an immutable Orbit `UiState` and emits one-shot `UiSideEffect`; it receives neither Koin nor a
-Navigator. The common host collects the effects and validates every requested transition.
+an immutable Orbit `ViewState` and emits typed one-shot `SideEffect`; it receives neither Koin nor a
+Navigator. The screen collects these effects, handles `ViewEffect` locally, and forwards
+`NavigationEffect` to the common host, which validates every requested transition.
+Entry-owned UI actions that leave the screen are accepted only while their entry lifecycle is
+`RESUMED`; system back and iOS edge-back requests are handled directly by the common host. Structural
+effects such as `PopToRoot` are not lifecycle-gated and cannot be lost under a dialog or transition.
 
-An experiment route passes its typed ID only. `ExperimentEntryViewModel` observes a current
+An experiment route passes its typed ID only. `NavigationExperimentViewModel` observes a current
 `ExperimentProjection` via the domain `ExperimentProjectionObserver` abstraction. The present
 in-memory implementation is a replaceable DEN-10 scaffold for a later persisted DEN-11 projection;
 no destination restores serialized screen state.
@@ -23,11 +27,12 @@ Confirmation routes do not contain a result or caller stack. Confirm, explicit c
 back, and the iOS leading-edge bridge all resolve through the common host. The dialog is popped first,
 then a typed confirmed/cancelled result is queued for its immediate matching experiment caller before
 the final route snapshot is awaited. After recomposition, the caller ViewModel receives it as an Orbit
-side effect. The result is not a route field or `UiState` value.
+side effect. The result is not a route field or `ViewState` value.
 
-External URLs accept only the two allowlisted experiment IDs. Bad URLs, stale effects, unsupported
-flow IDs, malformed dialogs, and impossible transitions fail closed to Gallery. This preserves one
-safe root on both platforms without giving a native host a second navigation stack.
+External URLs accept only the two allowlisted experiment IDs. Stale effects from entries already
+removed from the stack are ignored; bad URLs, unsupported flow IDs, malformed dialogs, and impossible
+transitions fail closed to Gallery. This preserves one safe root on both platforms without giving a
+native host a second navigation stack.
 
 The event bridge consumes an external event only after its host transition finishes, and only when
 the event ID still matches. A remounted host therefore cannot replay a handled URL; a repeated live
@@ -47,7 +52,7 @@ recreation also continues to use Navigation 3's saved-state configuration.
 
 The restore codec rejects and clears corrupt JSON, unknown versions, unknown experiment IDs,
 overlong lists, unpaired flow steps, and dialogs without their matching caller; it then starts at
-Gallery. `UiState`, observer projections, and completed dialog results are excluded. Entries re-read
+Gallery. `ViewState`, observer projections, and completed dialog results are excluded. Entries re-read
 their projection after restoration. A dialog visible at process interruption restores only as a valid
 dialog route; no half-delivered outcome is replayed.
 
