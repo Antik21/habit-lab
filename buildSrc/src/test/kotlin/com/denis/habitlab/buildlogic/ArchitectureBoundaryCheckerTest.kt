@@ -98,6 +98,72 @@ class ArchitectureBoundaryCheckerTest {
     }
 
     @Test
+    fun `allows Koin only from the exact navigation entry composition boundary`() {
+        val allowed = source(
+            relativePath = navigationEntryKoinCompositionPath,
+            packageName = "$sharedRoot.app",
+            body = "import org.koin.compose.viewmodel.koinViewModel\nclass Composition",
+        )
+        val suffixBypass = source(
+            relativePath = "$navigationEntryKoinCompositionPath.bak",
+            packageName = "$sharedRoot.app",
+            body = "import org.koin.compose.viewmodel.koinViewModel\nclass Composition",
+        )
+        val wrongPackage = source(
+            relativePath = navigationEntryKoinCompositionPath,
+            packageName = "$sharedRoot.app.entry",
+            body = "import org.koin.compose.viewmodel.koinViewModel\nclass Composition",
+        )
+
+        assertEquals(emptyList(), checker.findViolations(listOf(allowed)))
+        assertEquals(
+            listOf(
+                "$navigationEntryKoinCompositionPath.bak: org.koin references are only allowed in di",
+            ),
+            checker.findViolations(listOf(suffixBypass)),
+        )
+        assertEquals(
+            listOf(
+                "$navigationEntryKoinCompositionPath: org.koin references are only allowed in di",
+            ),
+            checker.findViolations(listOf(wrongPackage)),
+        )
+    }
+
+    @Test
+    fun `allows lifecycle only from the exact navigation entry view model boundary`() {
+        val allowed = source(
+            relativePath = navigationEntryViewModelsPath,
+            packageName = "$sharedRoot.presentation.navigation",
+            body = "import androidx.lifecycle.ViewModel\nclass EntryViewModel : ViewModel()",
+        )
+        val suffixBypass = source(
+            relativePath = "$navigationEntryViewModelsPath.bak",
+            packageName = "$sharedRoot.presentation.navigation",
+            body = "import androidx.lifecycle.ViewModel\nclass EntryViewModel : ViewModel()",
+        )
+        val wrongPackage = source(
+            relativePath = navigationEntryViewModelsPath,
+            packageName = "$sharedRoot.presentation.navigation.entry",
+            body = "import androidx.lifecycle.ViewModel\nclass EntryViewModel : ViewModel()",
+        )
+
+        assertEquals(emptyList(), checker.findViolations(listOf(allowed)))
+        assertEquals(
+            listOf(
+                "$navigationEntryViewModelsPath.bak: presentation must not use native or infrastructure APIs",
+            ),
+            checker.findViolations(listOf(suffixBypass)),
+        )
+        assertEquals(
+            listOf(
+                "$navigationEntryViewModelsPath: presentation must not use native or infrastructure APIs",
+            ),
+            checker.findViolations(listOf(wrongPackage)),
+        )
+    }
+
+    @Test
     fun `reports a Koin import from the exact root package without reporting root content`() {
         val source = ArchitectureSource(
             relativePath = "RootKoin.kt",
@@ -392,6 +458,10 @@ class ArchitectureBoundaryCheckerTest {
 
     private companion object {
         const val sharedRoot = "com.denis.habitlab.shared"
+        const val navigationEntryKoinCompositionPath =
+            "src/commonMain/kotlin/com/denis/habitlab/shared/app/NavigationEntryKoinComposition.kt"
+        const val navigationEntryViewModelsPath =
+            "src/commonMain/kotlin/com/denis/habitlab/shared/presentation/navigation/NavigationEntryViewModels.kt"
         val layers = listOf("app", "core", "data", "di", "domain", "presentation")
         val allowedDependencies = mapOf(
             "core" to emptySet<String>(),
