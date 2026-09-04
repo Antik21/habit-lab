@@ -19,8 +19,9 @@ confirmation is a `DialogSceneStrategy` entry. Its typed result is delivered to 
 only after that dialog entry is popped; system or gesture dismissal maps to `cancelled`.
 
 Entry-owned screen actions are ignored unless their entry is `RESUMED`, which prevents duplicate
-pushes while a transition is running. Platform back and external URL events are serialized separately
-through the common event bridge. `HabitLabDeepLink` accepts only these exact routes:
+pushes while a transition is running. Platform back and external URL callbacks enter through distinct
+common bridge signals and are not covered by that entry guard. `HabitLabDeepLink` accepts only these
+exact routes:
 
 - `habitlab://experiment/daily-movement`
 - `habitlab://experiment/sleep-routine`
@@ -60,12 +61,14 @@ recorded in [`../adr/0002-navigation3-ios-restoration-runtime.md`](../adr/0002-n
 
 An Android regression flow also delivered deep link A, then B, recreated the Activity in both
 orientations, and delivered B again. The typed B route remained current throughout, confirming that a
-stale launch Intent is not replayed over the restored stack.
+stale launch Intent is not replayed over the restored stack. A second probe backgrounded route B,
+killed only the application process while retaining its task, and launched a new route A URL; the cold
+Activity creation displayed typed route A.
 
-The versioned matrix above is the retained brief test log. Each Pass was observed from a completed
-Maestro/XCUITest flow on the named target; the Partial result was reproduced with a controlled
-terminate/relaunch and a screenshot showing Gallery. Raw runner directories were machine-local and are
-not cited as durable artifacts. The selectors and commands below keep every scenario reproducible.
+The versioned matrix above is the retained observational test log. Each Pass was observed from a
+completed Maestro/XCUITest flow on the named target; the Partial result was reproduced with a
+controlled terminate/relaunch and a screenshot showing Gallery. Raw runner directories were
+machine-local and are not cited as durable artifacts.
 
 Stable selectors live in the closed `AutomationId` enum under `habitlab.gallery.*` and
 `habitlab.navigation.*`; automation does not depend on display strings or runtime values.
