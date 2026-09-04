@@ -33,6 +33,11 @@
     <string name="navigation_experiment_open_dialog_label">Open confirmation dialog</string>
     <string name="navigation_experiment_start_flow_label">Start nested flow</string>
     <string name="navigation_experiment_open_settings_label">Open app settings</string>
+    <string name="navigation_experiment_loading_title">Loading experiment</string>
+    <string name="navigation_experiment_loading_accessibility_label">Experiment content is loading</string>
+    <string name="navigation_experiment_error_title">Could not load experiment</string>
+    <string name="navigation_experiment_error_message">Experiment details are unavailable. Go back and try again later.</string>
+    <string name="navigation_experiment_error_accessibility_label">Experiment loading error</string>
     <string name="navigation_flow_step_one_title">Flow %1$s: step 1</string>
     <string name="navigation_flow_step_one_subtitle">This route is the first entry in one shared back stack.</string>
     <string name="navigation_flow_step_two_title">Flow %1$s: step 2</string>

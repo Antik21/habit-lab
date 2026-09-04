@@ -5,8 +5,8 @@ import com.denis.habitlab.shared.presentation.navigation.FlowId as PresentationF
 
 /**
  * App-route façade retained for route/deep-link callers. The shell consumes these IDs through the
- * presentation contract, preserving the app → presentation boundary while core remains shared by
- * the domain observer and data projection.
+ * presentation contract, preserving the app → presentation boundary while the domain model stays
+ * shared by the repository and observers.
  */
 typealias ExperimentId = PresentationExperimentId
 typealias FlowId = PresentationFlowId

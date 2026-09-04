@@ -4,6 +4,7 @@ android-compileSdk = "37"
 android-minSdk = "33"
 android-targetSdk = "36"
 androidx-activity = "1.13.0"
+androidx-test-runner = "1.7.0"
 compose-multiplatform = "1.12.0"
 compose-material3 = "1.9.0"
 kotlin = "2.4.10"
@@ -13,9 +14,14 @@ kotlinx-serialization = "1.9.0"
 coroutines = "1.9.0"
 jetbrains-lifecycle = "2.11.0-beta01"
 orbit = "11.0.0"
+ksp = "2.3.11"
+room3 = "3.0.2"
+sqlite = "2.7.0"
+kotlinx-datetime = "0.8.0"
 
 [libraries]
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity" }
+androidx-test-runner = { module = "androidx.test:runner", version.ref = "androidx-test-runner" }
 compose-foundation = { module = "org.jetbrains.compose.foundation:foundation", version.ref = "compose-multiplatform" }
 compose-material3 = { module = "org.jetbrains.compose.material3:material3", version.ref = "compose-material3" }
 compose-resources = { module = "org.jetbrains.compose.components:components-resources", version.ref = "compose-multiplatform" }
@@ -34,6 +40,10 @@ jetbrains-lifecycle-viewmodel-navigation3 = { module = "org.jetbrains.androidx.l
 orbit-core = { module = "org.orbit-mvi:orbit-core", version.ref = "orbit" }
 orbit-viewmodel = { module = "org.orbit-mvi:orbit-viewmodel", version.ref = "orbit" }
 orbit-compose = { module = "org.orbit-mvi:orbit-compose", version.ref = "orbit" }
+kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinx-datetime" }
+androidx-room3-runtime = { module = "androidx.room3:room3-runtime", version.ref = "room3" }
+androidx-room3-compiler = { module = "androidx.room3:room3-compiler", version.ref = "room3" }
+androidx-sqlite-bundled = { module = "androidx.sqlite:sqlite-bundled", version.ref = "sqlite" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
@@ -42,3 +52,5 @@ compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "
 jetbrains-compose = { id = "org.jetbrains.compose", version.ref = "compose-multiplatform" }
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
+androidx-room3 = { id = "androidx.room3", version.ref = "room3" }
