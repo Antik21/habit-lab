@@ -16,7 +16,7 @@ class ArchitectureBoundaryChecker {
     }
 
     private fun findViolations(source: ArchitectureSource): List<String> {
-        val code = stripKotlinCommentsAndStrings(source.content)
+        val code = normalizeQualifiedNameSeparators(stripKotlinCommentsAndStrings(source.content))
         val packageName = packageDeclaration.find(code)?.groupValues?.get(1)
             ?: return listOf("${source.relativePath}: Kotlin source must declare a package")
         val violations = mutableListOf<String>()
@@ -271,6 +271,10 @@ class ArchitectureBoundaryChecker {
         return result.toString()
     }
 
+    /** Kotlin permits whitespace and comments around dots in qualified names. */
+    private fun normalizeQualifiedNameSeparators(code: String): String =
+        code.replace(qualifiedNameSeparator, ".")
+
     private fun hasRootPackageContent(code: String): Boolean {
         var fileAnnotationNesting = 0
 
@@ -328,6 +332,7 @@ class ArchitectureBoundaryChecker {
         const val sharedRootPackage = "com.denis.habitlab.shared"
         val layers = listOf("app", "core", "data", "di", "domain", "presentation")
         val packageDeclaration = Regex("(?m)^\\s*package\\s+([A-Za-z0-9_.]+)")
+        val qualifiedNameSeparator = Regex("(?<=[A-Za-z0-9_])\\s*\\.\\s*(?=[A-Za-z_])")
         val sharedLayerReference = Regex("com\\.denis\\.habitlab\\.shared\\.(app|core|data|di|domain|presentation)(?:\\.|\\b)")
         val allowedDependencies = mapOf(
             "core" to emptySet<String>(),

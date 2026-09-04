@@ -10,10 +10,8 @@ import org.orbitmvi.orbit.Container
 import org.orbitmvi.orbit.ContainerHost
 import org.orbitmvi.orbit.container
 
-/** Immutable rendering state for the gallery entry. Navigation is emitted separately. */
-data class GalleryUiState(
-    val isReady: Boolean = true,
-)
+/** Minimal Orbit state contract for the stateless gallery entry. */
+data object GalleryUiState
 
 sealed interface GalleryUiSideEffect {
     data class OpenExperiment(val experimentId: ExperimentId) : GalleryUiSideEffect
@@ -25,7 +23,7 @@ sealed interface GalleryUiSideEffect {
 
 class GalleryEntryViewModel : ViewModel(), ContainerHost<GalleryUiState, GalleryUiSideEffect> {
     override val container: Container<GalleryUiState, GalleryUiSideEffect> =
-        viewModelScope.container(GalleryUiState())
+        viewModelScope.container(GalleryUiState)
 
     fun openExperiment(externalId: String) = intent {
         ExperimentId.fromExternalValue(externalId)?.let { experimentId ->
@@ -152,13 +150,17 @@ class ConfirmationDialogEntryViewModel(
 ) : ViewModel(), ContainerHost<ConfirmationDialogUiState, ConfirmationDialogUiSideEffect> {
     override val container: Container<ConfirmationDialogUiState, ConfirmationDialogUiSideEffect> =
         viewModelScope.container(ConfirmationDialogUiState(experimentId))
+    private var hasResolved = false
 
     fun confirm() = resolve(ExperimentDialogResult.Confirmed(experimentId))
 
     fun cancel() = resolve(ExperimentDialogResult.Cancelled(experimentId))
 
     private fun resolve(result: ExperimentDialogResult) = intent {
-        postSideEffect(ConfirmationDialogUiSideEffect.Resolve(result))
+        if (!hasResolved) {
+            hasResolved = true
+            postSideEffect(ConfirmationDialogUiSideEffect.Resolve(result))
+        }
     }
 }
 

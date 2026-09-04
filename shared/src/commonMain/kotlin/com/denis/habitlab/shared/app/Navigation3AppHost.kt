@@ -32,6 +32,10 @@ import com.denis.habitlab.shared.presentation.navigation.NavigationExperimentScr
 import com.denis.habitlab.shared.presentation.navigation.NavigationFlowStepOneScreen
 import com.denis.habitlab.shared.presentation.navigation.NavigationFlowStepTwoScreen
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.modules.SerializersModule
@@ -72,7 +76,6 @@ internal fun Navigation3AppHost(
         )
     }
     val navigationEvent = navigationEvents.latestEvent
-    val backRequestId = navigationEvents.latestBackRequestId
 
     LaunchedEffect(restoredSnapshot.shouldClearStoredSnapshot, snapshotStore) {
         if (restoredSnapshot.shouldClearStoredSnapshot) {
@@ -85,8 +88,10 @@ internal fun Navigation3AppHost(
             navigationEvents.consume(event.id)
         }
     }
-    LaunchedEffect(backRequestId) {
-        if (backRequestId > 0L) navigator.onBack()
+    LaunchedEffect(navigationEvents, navigator) {
+        navigationEvents.backRequests.collect {
+            withContext(NonCancellable) { navigator.onBack() }
+        }
     }
     val entryDecorators = listOf(
         rememberSaveableStateHolderNavEntryDecorator<NavKey>(),
@@ -102,19 +107,16 @@ internal fun Navigation3AppHost(
         entryProvider<NavKey> {
             entry<AppDestination.Gallery> {
                 val viewModel: GalleryEntryViewModel = navigationEntryViewModel(key = "gallery")
-                val state by viewModel.collectAsState()
                 viewModel.collectSideEffect(sideEffect = navigator::handleGalleryEffect)
 
-                if (state.isReady) {
-                    ComponentGalleryScreen(
-                        appTitle = appTitle,
-                        onBack = rememberDropUnlessResumedNavigationAction(viewModel::back),
-                        onOpenExperiment = rememberDropUnlessResumedNavigationAction(
-                            viewModel::openExperiment,
-                        ),
-                        onStartFlow = rememberDropUnlessResumedNavigationAction(viewModel::startFlow),
-                    )
-                }
+                ComponentGalleryScreen(
+                    appTitle = appTitle,
+                    onBack = rememberDropUnlessResumedNavigationAction(viewModel::back),
+                    onOpenExperiment = rememberDropUnlessResumedNavigationAction(
+                        viewModel::openExperiment,
+                    ),
+                    onStartFlow = rememberDropUnlessResumedNavigationAction(viewModel::startFlow),
+                )
             }
             entry<AppDestination.Experiment> { route ->
                 val viewModel: ExperimentEntryViewModel = navigationEntryViewModel(
@@ -251,15 +253,13 @@ object ExperimentDialogResult {
 /** Common, host-safe signal for initial and repeated platform deep-link delivery. */
 class AppNavigationEventBridge {
     private var nextEventId = 0L
-    private var nextBackRequestId = 0L
     private var _latestEvent by mutableStateOf<ExternalNavigationEvent?>(null)
-    private var _latestBackRequestId by mutableStateOf(0L)
+    private val backRequestChannel = Channel<Unit>(Channel.UNLIMITED)
 
     val latestEvent: ExternalNavigationEvent?
         get() = _latestEvent
 
-    val latestBackRequestId: Long
-        get() = _latestBackRequestId
+    val backRequests: Flow<Unit> = backRequestChannel.receiveAsFlow()
 
     fun accept(rawUrl: String?) {
         nextEventId += 1
@@ -274,8 +274,7 @@ class AppNavigationEventBridge {
     }
 
     fun requestBack() {
-        nextBackRequestId += 1
-        _latestBackRequestId = nextBackRequestId
+        check(backRequestChannel.trySend(Unit).isSuccess) { "Back request channel is unavailable" }
     }
 }
 

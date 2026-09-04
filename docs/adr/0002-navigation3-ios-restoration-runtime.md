@@ -23,9 +23,10 @@ The common app shell owns one versioned, route-only snapshot. It stores only the
 final post-operation stack after every completed push, pop, root reset, dialog resolution, flow
 completion, or external URL transition; transitional remove/add states are never persisted. Android
 serializes `SharedPreferences.commit()` calls on a dedicated background executor and awaits that
-result without disk I/O on the UI thread. A failed replacement attempts to remove the key on that
-same executor so a known-stale valid route is not intentionally retained. iOS writes the same encoded
-payload through `NSUserDefaults`. No Android Activity or Swift type mirrors the stack.
+result without performing commit disk I/O on the UI thread; the small initial preferences read remains
+synchronous during composition. A failed replacement attempts to remove the key on that same executor
+so a known-stale valid route is not intentionally retained. iOS writes the same encoded payload through
+`NSUserDefaults`. No Android Activity or Swift type mirrors the stack.
 
 The restore codec accepts only version 1 snapshots that begin at Gallery and have a valid route
 sequence: allowlisted experiment IDs, correctly paired flow steps, and a dialog immediately above

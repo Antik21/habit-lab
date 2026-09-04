@@ -180,6 +180,8 @@ class ArchitectureBoundaryCheckerTest {
             "app.cash.sqldelight.db.SqlDriver" to "database API",
             "androidx.lifecycle.SavedStateHandle" to "other lifecycle API",
             "androidx.lifecycle.viewmodel.CreationExtras" to "nested lifecycle API",
+            "androidx . lifecycle.SavedStateHandle" to "whitespace-split lifecycle API",
+            "androidx./* split */lifecycle.SavedStateHandle" to "comment-split lifecycle API",
         )
 
         forbiddenReferences.forEach { (reference, description) ->

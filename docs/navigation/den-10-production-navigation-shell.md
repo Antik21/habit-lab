@@ -21,9 +21,9 @@ no destination restores serialized screen state.
 
 Confirmation routes do not contain a result or caller stack. Confirm, explicit cancel, Android system
 back, and the iOS leading-edge bridge all resolve through the common host. The dialog is popped first,
-then a typed confirmed/cancelled result is synchronously published to its immediate matching
-experiment caller before the final route snapshot is awaited. The result is not a route field or
-`UiState` value.
+then a typed confirmed/cancelled result is queued for its immediate matching experiment caller before
+the final route snapshot is awaited. After recomposition, the caller ViewModel receives it as an Orbit
+side effect. The result is not a route field or `UiState` value.
 
 External URLs accept only the two allowlisted experiment IDs. Bad URLs, stale effects, unsupported
 flow IDs, malformed dialogs, and impossible transitions fail closed to Gallery. This preserves one
@@ -40,9 +40,10 @@ The version 1 common snapshot stores only a valid ordered list of routes/typed I
 external navigation, dialog pop/result delivery, back, root fallback, and multi-step flow completion;
 it never writes an intermediate state while an operation removes then adds entries. Android performs
 serialized `SharedPreferences.commit()` writes on a dedicated background executor and awaits their
-completion without UI-thread disk I/O. If a replacement fails, it attempts to delete the snapshot on
-that executor before returning. iOS writes the same payload behind `NSUserDefaults`. Normal Android
-Activity recreation also continues to use Navigation 3's saved-state configuration.
+completion without performing commit disk I/O on the UI thread. The small initial preferences read is
+synchronous during composition. If a replacement fails, it attempts to delete the snapshot on that
+executor before returning. iOS writes the same payload behind `NSUserDefaults`. Normal Android Activity
+recreation also continues to use Navigation 3's saved-state configuration.
 
 The restore codec rejects and clears corrupt JSON, unknown versions, unknown experiment IDs,
 overlong lists, unpaired flow steps, and dialogs without their matching caller; it then starts at

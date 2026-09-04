@@ -10,6 +10,10 @@ import kotlinx.serialization.Serializable
 data class ExperimentId(
     val value: String,
 ) {
+    init {
+        require(value in knownValues) { "Unsupported experiment ID: $value" }
+    }
+
     companion object {
         private val knownValues = setOf("daily-movement", "sleep-routine")
 
