@@ -1,3 +1,29 @@
 <resources>
     <string name="app_name">Habit Lab</string>
+    <string name="gallery_title">%1$s component gallery</string>
+    <string name="gallery_intro">Shared Material 3 foundation for Android and iOS.</string>
+    <string name="gallery_back_action_label">‹</string>
+    <string name="gallery_back_accessibility_label">Go back</string>
+    <string name="gallery_primary_action_label">Open dialog</string>
+    <string name="gallery_secondary_action_label">Secondary action</string>
+    <string name="gallery_field_label">Habit name</string>
+    <string name="gallery_field_accessibility_label">Habit name input</string>
+    <string name="gallery_row_daily_movement_title">Daily movement</string>
+    <string name="gallery_row_daily_movement_subtitle">Review its routine</string>
+    <string name="gallery_row_daily_movement_accessibility_label">Open Daily movement</string>
+    <string name="gallery_row_sleep_routine_title">Sleep routine</string>
+    <string name="gallery_row_sleep_routine_subtitle">Review its schedule</string>
+    <string name="gallery_row_sleep_routine_accessibility_label">Open Sleep routine</string>
+    <string name="gallery_loading_title">Loading components</string>
+    <string name="gallery_loading_accessibility_label">Component content is loading</string>
+    <string name="gallery_empty_title">No component data</string>
+    <string name="gallery_empty_message">Content will appear here when it is available.</string>
+    <string name="gallery_empty_accessibility_label">No component data available</string>
+    <string name="gallery_error_title">Could not load components</string>
+    <string name="gallery_error_message">Try again when the data source is available.</string>
+    <string name="gallery_error_accessibility_label">Component loading error</string>
+    <string name="gallery_dialog_title">Confirm gallery action</string>
+    <string name="gallery_dialog_message">This is a reusable dialog shell.</string>
+    <string name="gallery_dialog_confirm_label">Confirm</string>
+    <string name="gallery_dialog_dismiss_label">Dismiss</string>
 </resources>
