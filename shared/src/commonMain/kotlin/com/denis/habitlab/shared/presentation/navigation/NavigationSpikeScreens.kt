@@ -14,6 +14,8 @@ import com.denis.habitlab.shared.presentation.ui.automation.AutomationId
 import com.denis.habitlab.shared.presentation.ui.automation.NavigationSpikeAutomationIds
 import com.denis.habitlab.shared.presentation.ui.automation.autodevId
 import com.denis.habitlab.shared.presentation.ui.component.HabitLabAppScaffold
+import com.denis.habitlab.shared.presentation.ui.component.HabitLabErrorBlock
+import com.denis.habitlab.shared.presentation.ui.component.HabitLabLoadingBlock
 import com.denis.habitlab.shared.presentation.ui.component.HabitLabPrimaryButton
 import com.denis.habitlab.shared.presentation.ui.component.HabitLabSecondaryButton
 import com.denis.habitlab.shared.presentation.ui.component.HabitLabToolbar
@@ -29,6 +31,11 @@ import habitlab.shared.generated.resources.navigation_dialog_result_confirmed
 import habitlab.shared.generated.resources.navigation_dialog_title
 import habitlab.shared.generated.resources.navigation_experiment_open_dialog_label
 import habitlab.shared.generated.resources.navigation_experiment_open_settings_label
+import habitlab.shared.generated.resources.navigation_experiment_error_accessibility_label
+import habitlab.shared.generated.resources.navigation_experiment_error_message
+import habitlab.shared.generated.resources.navigation_experiment_error_title
+import habitlab.shared.generated.resources.navigation_experiment_loading_accessibility_label
+import habitlab.shared.generated.resources.navigation_experiment_loading_title
 import habitlab.shared.generated.resources.navigation_experiment_start_flow_label
 import habitlab.shared.generated.resources.navigation_experiment_subtitle
 import habitlab.shared.generated.resources.navigation_experiment_title
@@ -57,6 +64,7 @@ fun NavigationDialogResultDisplay.label(): String = when (this) {
 @Composable
 fun NavigationExperimentScreen(
     experimentId: String,
+    content: ExperimentContentState,
     dialogResult: NavigationDialogResultDisplay?,
     onBack: () -> Unit,
     onOpenDialog: () -> Unit,
@@ -84,34 +92,59 @@ fun NavigationExperimentScreen(
                 .padding(HabitLabSpacing.Large),
             verticalArrangement = Arrangement.spacedBy(HabitLabSpacing.Medium),
         ) {
-            Text(
-                text = stringResource(Res.string.navigation_experiment_subtitle, experimentId),
-                style = MaterialTheme.typography.bodyLarge,
-            )
-            HabitLabPrimaryButton(
-                modifier = Modifier.fillMaxWidth(),
-                label = stringResource(Res.string.navigation_experiment_open_dialog_label),
-                automationId = NavigationSpikeAutomationIds.experimentOpenDialog,
-                onClick = onOpenDialog,
-            )
-            HabitLabSecondaryButton(
-                modifier = Modifier.fillMaxWidth(),
-                label = stringResource(Res.string.navigation_experiment_start_flow_label),
-                automationId = NavigationSpikeAutomationIds.experimentStartFlow,
-                onClick = onStartFlow,
-            )
-            HabitLabSecondaryButton(
-                modifier = Modifier.fillMaxWidth(),
-                label = stringResource(Res.string.navigation_experiment_open_settings_label),
-                automationId = NavigationSpikeAutomationIds.experimentOpenSettings,
-                onClick = onOpenApplicationSettings,
-            )
-            dialogResult?.let { result ->
-                Text(
-                    modifier = Modifier.autodevId(result.automationId),
-                    text = result.label(),
-                    style = MaterialTheme.typography.bodyMedium,
+            when (content) {
+                ExperimentContentState.Loading -> HabitLabLoadingBlock(
+                    title = stringResource(Res.string.navigation_experiment_loading_title),
+                    accessibilityLabel = stringResource(
+                        Res.string.navigation_experiment_loading_accessibility_label,
+                    ),
+                    automationId = NavigationSpikeAutomationIds.experimentLoadingState,
                 )
+
+                is ExperimentContentState.Failed -> HabitLabErrorBlock(
+                    title = stringResource(Res.string.navigation_experiment_error_title),
+                    message = stringResource(Res.string.navigation_experiment_error_message),
+                    accessibilityLabel = stringResource(
+                        Res.string.navigation_experiment_error_accessibility_label,
+                    ),
+                    automationId = NavigationSpikeAutomationIds.experimentErrorState,
+                )
+
+                is ExperimentContentState.Available -> {
+                    Text(
+                        text = content.projection.displayName,
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Text(
+                        text = stringResource(Res.string.navigation_experiment_subtitle, experimentId),
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    HabitLabPrimaryButton(
+                        modifier = Modifier.fillMaxWidth(),
+                        label = stringResource(Res.string.navigation_experiment_open_dialog_label),
+                        automationId = NavigationSpikeAutomationIds.experimentOpenDialog,
+                        onClick = onOpenDialog,
+                    )
+                    HabitLabSecondaryButton(
+                        modifier = Modifier.fillMaxWidth(),
+                        label = stringResource(Res.string.navigation_experiment_start_flow_label),
+                        automationId = NavigationSpikeAutomationIds.experimentStartFlow,
+                        onClick = onStartFlow,
+                    )
+                    HabitLabSecondaryButton(
+                        modifier = Modifier.fillMaxWidth(),
+                        label = stringResource(Res.string.navigation_experiment_open_settings_label),
+                        automationId = NavigationSpikeAutomationIds.experimentOpenSettings,
+                        onClick = onOpenApplicationSettings,
+                    )
+                    dialogResult?.let { result ->
+                        Text(
+                            modifier = Modifier.autodevId(result.automationId),
+                            text = result.label(),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                }
             }
         }
     }

@@ -17,14 +17,17 @@ import androidx.navigation3.scene.SinglePaneSceneStrategy
 import androidx.navigation3.ui.NavDisplay
 import androidx.savedstate.serialization.SavedStateConfiguration
 import com.denis.habitlab.shared.presentation.gallery.ComponentGalleryScreen
+import com.denis.habitlab.shared.presentation.gallery.ComponentGalleryExperimentRows
 import com.denis.habitlab.shared.presentation.navigation.ConfirmationDialogEntryViewModel
 import com.denis.habitlab.shared.presentation.navigation.ConfirmationDialogUiSideEffect
 import com.denis.habitlab.shared.presentation.navigation.ExperimentDialogResult as NavigationDialogResult
 import com.denis.habitlab.shared.presentation.navigation.ExperimentEntryViewModel
+import com.denis.habitlab.shared.presentation.navigation.ExperimentContentState
 import com.denis.habitlab.shared.presentation.navigation.ExperimentUiSideEffect
 import com.denis.habitlab.shared.presentation.navigation.FlowEntryViewModel
 import com.denis.habitlab.shared.presentation.navigation.FlowUiSideEffect
 import com.denis.habitlab.shared.presentation.navigation.GalleryEntryViewModel
+import com.denis.habitlab.shared.presentation.navigation.GalleryContentState
 import com.denis.habitlab.shared.presentation.navigation.GalleryUiSideEffect
 import com.denis.habitlab.shared.presentation.navigation.NavigationDialogResultDisplay
 import com.denis.habitlab.shared.presentation.navigation.NavigationExperimentDialogContent
@@ -107,7 +110,16 @@ internal fun Navigation3AppHost(
         entryProvider<NavKey> {
             entry<AppDestination.Gallery> {
                 val viewModel: GalleryEntryViewModel = navigationEntryViewModel(key = "gallery")
+                val state by viewModel.collectAsState()
                 viewModel.collectSideEffect(sideEffect = navigator::handleGalleryEffect)
+                val rows = when (val content = state.content) {
+                    GalleryContentState.Loading -> ComponentGalleryExperimentRows(isLoading = true)
+                    is GalleryContentState.Failed -> ComponentGalleryExperimentRows(isError = true)
+                    is GalleryContentState.Available -> ComponentGalleryExperimentRows(
+                        hasDailyMovement = content.experimentIds.any { it.value == DAILY_MOVEMENT_ID },
+                        hasSleepRoutine = content.experimentIds.any { it.value == SLEEP_ROUTINE_ID },
+                    )
+                }
 
                 ComponentGalleryScreen(
                     appTitle = appTitle,
@@ -116,6 +128,7 @@ internal fun Navigation3AppHost(
                         viewModel::openExperiment,
                     ),
                     onStartFlow = rememberDropUnlessResumedNavigationAction(viewModel::startFlow),
+                    experimentRows = rows,
                 )
             }
             entry<AppDestination.Experiment> { route ->
@@ -148,7 +161,12 @@ internal fun Navigation3AppHost(
                 }
 
                 NavigationExperimentScreen(
-                    experimentId = state.projection?.id?.value ?: route.experimentId.value,
+                    experimentId = (state.content as? ExperimentContentState.Available)
+                        ?.projection
+                        ?.id
+                        ?.value
+                        ?: route.experimentId.value,
+                    content = state.content,
                     dialogResult = visibleDialogResult.displayFor(route.experimentId),
                     onBack = rememberDropUnlessResumedNavigationAction(viewModel::back),
                     onOpenDialog = rememberDropUnlessResumedNavigationAction(
@@ -221,6 +239,9 @@ internal fun Navigation3AppHost(
         entryProvider = entries,
     )
 }
+
+private const val DAILY_MOVEMENT_ID = "daily-movement"
+private const val SLEEP_ROUTINE_ID = "sleep-routine"
 
 /** The complete set of serializable Nav3 keys. Routes contain only typed IDs, never UiState. */
 @Serializable
@@ -406,7 +427,7 @@ private class AppNavigator(
     }
 
     private suspend fun openExperiment(experimentId: ExperimentId) {
-        if (ExperimentId.fromExternalValue(experimentId.value) == null) {
+        if (ExperimentId.fromInternalValue(experimentId.value) == null) {
             popToRoot()
             return
         }

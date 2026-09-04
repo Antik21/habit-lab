@@ -9,6 +9,8 @@ plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.compose.compiler)
+    alias(libs.plugins.ksp)
+    alias(libs.plugins.androidx.room3)
 }
 
 kotlin {
@@ -16,6 +18,14 @@ kotlin {
         namespace = "com.denis.habitlab.shared"
         compileSdk = libs.versions.android.compileSdk.get().toInt()
         minSdk = libs.versions.android.minSdk.get().toInt()
+
+        // The Android-KMP plugin disables tests by default. Run common Room regression tests on
+        // the API 33+ device target as well as the iOS simulator target.
+        withDeviceTestBuilder {
+            sourceSetTreeName = "test"
+        }.configure {
+            instrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        }
 
         compilerOptions {
             jvmTarget.set(JvmTarget.JVM_17)
@@ -61,11 +71,30 @@ kotlin {
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.kotlinx.serialization.core)
             implementation(libs.kotlinx.serialization.json)
+            implementation(libs.kotlinx.datetime)
+            implementation(libs.androidx.room3.runtime)
+            implementation(libs.androidx.sqlite.bundled)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
         }
+        getByName("androidDeviceTest").dependencies {
+            implementation(libs.androidx.test.runner)
+        }
     }
+}
+
+dependencies {
+    add("kspAndroid", libs.androidx.room3.compiler)
+    add("kspIosArm64", libs.androidx.room3.compiler)
+    add("kspIosSimulatorArm64", libs.androidx.room3.compiler)
+    if (HostManager.hostIsMac && HostManager.host.architecture == Architecture.X64) {
+        add("kspIosX64", libs.androidx.room3.compiler)
+    }
+}
+
+room3 {
+    schemaDirectory("$projectDir/schemas")
 }
 
 val checkArchitectureBoundaries = tasks.register(

@@ -3,15 +3,29 @@ package com.denis.habitlab.shared.presentation.navigation
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.denis.habitlab.shared.domain.observer.ExperimentProjection
+import com.denis.habitlab.shared.domain.observer.ExperimentProjectionObservation
 import com.denis.habitlab.shared.domain.observer.ExperimentProjectionObserver
+import com.denis.habitlab.shared.domain.observer.ExperimentListObservation
+import com.denis.habitlab.shared.domain.observer.ExperimentListObserver
+import com.denis.habitlab.shared.domain.repository.StorageFailure
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import org.orbitmvi.orbit.Container
 import org.orbitmvi.orbit.ContainerHost
 import org.orbitmvi.orbit.container
 
-/** Minimal Orbit state contract for the stateless gallery entry. */
-data object GalleryUiState
+/** The gallery exposes only persisted, allowlisted demo rows; it never fabricates navigation IDs. */
+data class GalleryUiState(
+    val content: GalleryContentState = GalleryContentState.Loading,
+)
+
+sealed interface GalleryContentState {
+    data object Loading : GalleryContentState
+
+    data class Available(val experimentIds: Set<ExperimentId>) : GalleryContentState
+
+    data class Failed(val failure: StorageFailure) : GalleryContentState
+}
 
 sealed interface GalleryUiSideEffect {
     data class OpenExperiment(val experimentId: ExperimentId) : GalleryUiSideEffect
@@ -21,14 +35,46 @@ sealed interface GalleryUiSideEffect {
     data object Back : GalleryUiSideEffect
 }
 
-class GalleryEntryViewModel : ViewModel(), ContainerHost<GalleryUiState, GalleryUiSideEffect> {
+class GalleryEntryViewModel(
+    private val experimentListObserver: ExperimentListObserver,
+) : ViewModel(), ContainerHost<GalleryUiState, GalleryUiSideEffect> {
     override val container: Container<GalleryUiState, GalleryUiSideEffect> =
-        viewModelScope.container(GalleryUiState)
+        viewModelScope.container(GalleryUiState())
+    private var availableExternalExperimentIds: Set<ExperimentId> = emptySet()
+
+    init {
+        viewModelScope.launch {
+            experimentListObserver.observeAll().collect { observation ->
+                intent {
+                    when (observation) {
+                        is ExperimentListObservation.Available -> {
+                            val supportedIds = observation.experiments
+                                .map { it.id }
+                                .filter { experimentId ->
+                                    ExperimentId.fromExternalValue(experimentId.value) == experimentId
+                                }
+                                .toSet()
+                            availableExternalExperimentIds = supportedIds
+                            reduce { GalleryUiState(GalleryContentState.Available(supportedIds)) }
+                        }
+
+                        is ExperimentListObservation.Failed -> {
+                            availableExternalExperimentIds = emptySet()
+                            reduce { GalleryUiState(GalleryContentState.Failed(observation.failure)) }
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     fun openExperiment(externalId: String) = intent {
-        ExperimentId.fromExternalValue(externalId)?.let { experimentId ->
+        val experimentId = ExperimentId.fromExternalValue(externalId)
+        if (experimentId != null && experimentId in availableExternalExperimentIds) {
             postSideEffect(GalleryUiSideEffect.OpenExperiment(experimentId))
-        } ?: postSideEffect(GalleryUiSideEffect.Back)
+        } else {
+            postSideEffect(GalleryUiSideEffect.Back)
+        }
     }
 
     fun startFlow() = intent {
@@ -42,8 +88,16 @@ class GalleryEntryViewModel : ViewModel(), ContainerHost<GalleryUiState, Gallery
 
 /** Projection state remains in memory only and is rebuilt from [ExperimentProjectionObserver]. */
 data class ExperimentUiState(
-    val projection: ExperimentProjection? = null,
+    val content: ExperimentContentState = ExperimentContentState.Loading,
 )
+
+sealed interface ExperimentContentState {
+    data object Loading : ExperimentContentState
+
+    data class Available(val projection: ExperimentProjection) : ExperimentContentState
+
+    data class Failed(val failure: StorageFailure) : ExperimentContentState
+}
 
 sealed interface ExperimentUiSideEffect {
     data object Back : ExperimentUiSideEffect
@@ -67,11 +121,21 @@ class ExperimentEntryViewModel(
 
     init {
         viewModelScope.launch {
-            projectionObserver.observe(experimentId).collect { projection ->
+            projectionObserver.observe(experimentId).collect { observation ->
                 intent {
-                    reduce { state.copy(projection = projection) }
-                    if (projection == null) {
-                        postSideEffect(ExperimentUiSideEffect.PopToRoot)
+                    when (observation) {
+                        is ExperimentProjectionObservation.Available -> {
+                            reduce { ExperimentUiState(ExperimentContentState.Available(observation.projection)) }
+                        }
+
+                        ExperimentProjectionObservation.Missing -> {
+                            reduce { ExperimentUiState(ExperimentContentState.Loading) }
+                            postSideEffect(ExperimentUiSideEffect.PopToRoot)
+                        }
+
+                        is ExperimentProjectionObservation.Failed -> {
+                            reduce { ExperimentUiState(ExperimentContentState.Failed(observation.failure)) }
+                        }
                     }
                 }
             }

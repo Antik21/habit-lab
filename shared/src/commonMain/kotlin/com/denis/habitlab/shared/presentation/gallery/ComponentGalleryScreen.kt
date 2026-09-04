@@ -64,6 +64,7 @@ fun ComponentGalleryScreen(appTitle: String) {
         onBack = {},
         onOpenExperiment = {},
         onStartFlow = {},
+        experimentRows = ComponentGalleryExperimentRows(),
     )
 }
 
@@ -77,6 +78,7 @@ fun ComponentGalleryScreen(
     onBack: () -> Unit,
     onOpenExperiment: (String) -> Unit,
     onStartFlow: () -> Unit,
+    experimentRows: ComponentGalleryExperimentRows,
 ) {
     var habitName by remember { mutableStateOf("") }
     var isDialogVisible by remember { mutableStateOf(false) }
@@ -129,51 +131,64 @@ fun ComponentGalleryScreen(
                         automationId = ComponentGalleryAutomationIds.textField,
                         onValueChange = { habitName = it },
                     )
-                    HabitLabClickableListRow(
-                        title = stringResource(Res.string.gallery_row_daily_movement_title),
-                        supportingText = stringResource(
-                            Res.string.gallery_row_daily_movement_subtitle,
-                        ),
-                        accessibilityLabel = stringResource(
-                            Res.string.gallery_row_daily_movement_accessibility_label,
-                        ),
-                        automationId = ComponentGalleryAutomationIds.firstRow,
-                        onClick = { onOpenExperiment(DAILY_MOVEMENT_EXPERIMENT_ID) },
-                    )
-                    HabitLabClickableListRow(
-                        title = stringResource(Res.string.gallery_row_sleep_routine_title),
-                        supportingText = stringResource(
-                            Res.string.gallery_row_sleep_routine_subtitle,
-                        ),
-                        accessibilityLabel = stringResource(
-                            Res.string.gallery_row_sleep_routine_accessibility_label,
-                        ),
-                        automationId = ComponentGalleryAutomationIds.secondRow,
-                        onClick = { onOpenExperiment(SLEEP_ROUTINE_EXPERIMENT_ID) },
-                    )
-                    HabitLabLoadingBlock(
-                        title = stringResource(Res.string.gallery_loading_title),
-                        accessibilityLabel = stringResource(
-                            Res.string.gallery_loading_accessibility_label,
-                        ),
-                        automationId = ComponentGalleryAutomationIds.loadingState,
-                    )
-                    HabitLabEmptyBlock(
-                        title = stringResource(Res.string.gallery_empty_title),
-                        message = stringResource(Res.string.gallery_empty_message),
-                        accessibilityLabel = stringResource(
-                            Res.string.gallery_empty_accessibility_label,
-                        ),
-                        automationId = ComponentGalleryAutomationIds.emptyState,
-                    )
-                    HabitLabErrorBlock(
-                        title = stringResource(Res.string.gallery_error_title),
-                        message = stringResource(Res.string.gallery_error_message),
-                        accessibilityLabel = stringResource(
-                            Res.string.gallery_error_accessibility_label,
-                        ),
-                        automationId = ComponentGalleryAutomationIds.errorState,
-                    )
+                    when {
+                        experimentRows.isLoading -> HabitLabLoadingBlock(
+                            title = stringResource(Res.string.gallery_loading_title),
+                            accessibilityLabel = stringResource(
+                                Res.string.gallery_loading_accessibility_label,
+                            ),
+                            automationId = ComponentGalleryAutomationIds.loadingState,
+                        )
+
+                        experimentRows.isError -> HabitLabErrorBlock(
+                            title = stringResource(Res.string.gallery_error_title),
+                            message = stringResource(Res.string.gallery_error_message),
+                            accessibilityLabel = stringResource(
+                                Res.string.gallery_error_accessibility_label,
+                            ),
+                            automationId = ComponentGalleryAutomationIds.errorState,
+                        )
+
+                        !experimentRows.hasDailyMovement && !experimentRows.hasSleepRoutine -> {
+                            HabitLabEmptyBlock(
+                                title = stringResource(Res.string.gallery_empty_title),
+                                message = stringResource(Res.string.gallery_empty_message),
+                                accessibilityLabel = stringResource(
+                                    Res.string.gallery_empty_accessibility_label,
+                                ),
+                                automationId = ComponentGalleryAutomationIds.emptyState,
+                            )
+                        }
+
+                        else -> {
+                            if (experimentRows.hasDailyMovement) {
+                                HabitLabClickableListRow(
+                                    title = stringResource(Res.string.gallery_row_daily_movement_title),
+                                    supportingText = stringResource(
+                                        Res.string.gallery_row_daily_movement_subtitle,
+                                    ),
+                                    accessibilityLabel = stringResource(
+                                        Res.string.gallery_row_daily_movement_accessibility_label,
+                                    ),
+                                    automationId = ComponentGalleryAutomationIds.firstRow,
+                                    onClick = { onOpenExperiment(DAILY_MOVEMENT_EXPERIMENT_ID) },
+                                )
+                            }
+                            if (experimentRows.hasSleepRoutine) {
+                                HabitLabClickableListRow(
+                                    title = stringResource(Res.string.gallery_row_sleep_routine_title),
+                                    supportingText = stringResource(
+                                        Res.string.gallery_row_sleep_routine_subtitle,
+                                    ),
+                                    accessibilityLabel = stringResource(
+                                        Res.string.gallery_row_sleep_routine_accessibility_label,
+                                    ),
+                                    automationId = ComponentGalleryAutomationIds.secondRow,
+                                    onClick = { onOpenExperiment(SLEEP_ROUTINE_EXPERIMENT_ID) },
+                                )
+                            }
+                        }
+                    }
             }
         }
         if (isDialogVisible) {
@@ -191,6 +206,14 @@ fun ComponentGalleryScreen(
         }
     }
 }
+
+/** Fixed selector-backed demo rows are visible only when those persisted IDs exist. */
+data class ComponentGalleryExperimentRows(
+    val isLoading: Boolean = false,
+    val hasDailyMovement: Boolean = false,
+    val hasSleepRoutine: Boolean = false,
+    val isError: Boolean = false,
+)
 
 private const val DAILY_MOVEMENT_EXPERIMENT_ID = "daily-movement"
 private const val SLEEP_ROUTINE_EXPERIMENT_ID = "sleep-routine"
