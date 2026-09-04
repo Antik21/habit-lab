@@ -12,6 +12,7 @@ import com.denis.habitlab.shared.domain.repository.CreateDraftResult
 import com.denis.habitlab.shared.domain.repository.EditDraftResult
 import com.denis.habitlab.shared.domain.repository.ExperimentRepository
 import com.denis.habitlab.shared.domain.repository.RecordDailyCheckInResult
+import com.denis.habitlab.shared.domain.repository.DeleteExperimentResult
 import com.denis.habitlab.shared.domain.repository.StorageFailure
 import com.denis.habitlab.shared.domain.repository.StorageOperation
 import kotlinx.coroutines.CancellationException
@@ -51,6 +52,15 @@ internal class RoomExperimentRepository(
                 RecordDailyCheckInResult.Missing(checkIn.experimentId)
             }
         }.getOrElse { failure -> RecordDailyCheckInResult.Failed(failure) }
+
+    override suspend fun deleteExperiment(experimentId: ExperimentId): DeleteExperimentResult =
+        storageWrite(StorageOperation.DELETE_EXPERIMENT) {
+            if (localDataSource.deleteExperiment(experimentId.value)) {
+                DeleteExperimentResult.Deleted(experimentId)
+            } else {
+                DeleteExperimentResult.Missing(experimentId)
+            }
+        }.getOrElse { failure -> DeleteExperimentResult.Failed(failure) }
 }
 
 private suspend fun <T> storageWrite(

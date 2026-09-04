@@ -82,11 +82,13 @@ fun HabitLabPrimaryButton(
     label: String,
     automationId: AutomationId,
     onClick: () -> Unit,
+    enabled: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     Button(
         modifier = modifier.autodevId(automationId),
         onClick = onClick,
+        enabled = enabled,
     ) {
         Text(text = label)
     }
@@ -97,11 +99,13 @@ fun HabitLabSecondaryButton(
     label: String,
     automationId: AutomationId,
     onClick: () -> Unit,
+    enabled: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     OutlinedButton(
         modifier = modifier.autodevId(automationId),
         onClick = onClick,
+        enabled = enabled,
     ) {
         Text(text = label)
     }
@@ -114,6 +118,8 @@ fun HabitLabTextField(
     accessibilityLabel: String,
     automationId: AutomationId,
     onValueChange: (String) -> Unit,
+    isError: Boolean = false,
+    enabled: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     OutlinedTextField(
@@ -125,6 +131,8 @@ fun HabitLabTextField(
         onValueChange = onValueChange,
         label = { Text(text = label) },
         singleLine = true,
+        isError = isError,
+        enabled = enabled,
     )
 }
 

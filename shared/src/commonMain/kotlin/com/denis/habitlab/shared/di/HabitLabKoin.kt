@@ -9,6 +9,8 @@ import com.denis.habitlab.shared.data.local.HabitLabDatabase
 import com.denis.habitlab.shared.data.local.RoomExperimentLocalDataSource
 import com.denis.habitlab.shared.data.observer.RoomExperimentObservers
 import com.denis.habitlab.shared.data.repository.AppMetadataRepositoryImpl
+import com.denis.habitlab.shared.data.repository.RuntimeAppPreferenceRepository
+import com.denis.habitlab.shared.data.repository.RecordedAtCurrentLocalDateSource
 import com.denis.habitlab.shared.data.repository.PlatformAppMetadataDataSource
 import com.denis.habitlab.shared.data.repository.RandomDraftExperimentIdSource
 import com.denis.habitlab.shared.data.repository.RoomExperimentRepository
@@ -19,14 +21,34 @@ import com.denis.habitlab.shared.domain.interactor.EditExperimentDraft
 import com.denis.habitlab.shared.domain.interactor.ExperimentIdSource
 import com.denis.habitlab.shared.domain.interactor.GetAppMetadata
 import com.denis.habitlab.shared.domain.interactor.RecordDailyCheckIn
+import com.denis.habitlab.shared.domain.interactor.DeleteExperiment
+import com.denis.habitlab.shared.domain.interactor.CurrentLocalDateSource
+import com.denis.habitlab.shared.domain.interactor.GetCurrentLocalDate
+import com.denis.habitlab.shared.domain.interactor.ObserveThemePreference
+import com.denis.habitlab.shared.domain.interactor.SetThemePreference
 import com.denis.habitlab.shared.domain.observer.DailyCheckInObserver
 import com.denis.habitlab.shared.domain.observer.ExperimentListObserver
 import com.denis.habitlab.shared.domain.observer.ExperimentProjectionObserver
 import com.denis.habitlab.shared.domain.repository.AppMetadataRepository
 import com.denis.habitlab.shared.domain.repository.ExperimentRepository
+import com.denis.habitlab.shared.domain.repository.AppPreferenceRepository
 import com.denis.habitlab.shared.presentation.AppPresenter
 import com.denis.habitlab.shared.presentation.gallery.ComponentGalleryUiMapper
 import com.denis.habitlab.shared.presentation.gallery.ComponentGalleryViewModel
+import com.denis.habitlab.shared.presentation.experimentlist.ExperimentListUiMapper
+import com.denis.habitlab.shared.presentation.experimentlist.ExperimentListViewModel
+import com.denis.habitlab.shared.presentation.experimentdetails.ExperimentDetailsUiMapper
+import com.denis.habitlab.shared.presentation.experimentdetails.ExperimentDetailsViewModel
+import com.denis.habitlab.shared.presentation.experimenteditor.ExperimentEditorUiMapper
+import com.denis.habitlab.shared.presentation.experimenteditor.ExperimentEditorViewModel
+import com.denis.habitlab.shared.presentation.dailycheckin.DailyCheckInUiMapper
+import com.denis.habitlab.shared.presentation.dailycheckin.DailyCheckInViewModel
+import com.denis.habitlab.shared.presentation.settings.SettingsUiMapper
+import com.denis.habitlab.shared.presentation.settings.SettingsViewModel
+import com.denis.habitlab.shared.presentation.metricpicker.MetricPickerViewModel
+import com.denis.habitlab.shared.presentation.confirmdelete.ConfirmDeleteViewModel
+import com.denis.habitlab.shared.presentation.navigation.ExperimentEditorEntryArguments
+import com.denis.habitlab.shared.presentation.navigation.MetricPickerEntryArguments
 import com.denis.habitlab.shared.presentation.navigation.confirmation.NavigationConfirmationDialogViewModel
 import com.denis.habitlab.shared.presentation.navigation.experiment.NavigationExperimentViewModel
 import com.denis.habitlab.shared.presentation.navigation.experiment.NavigationExperimentUiMapper
@@ -121,9 +143,15 @@ private fun habitLabModule(
     single<DailyCheckInObserver> { get<RoomExperimentObservers>() }
     single<ExperimentIdSource> { RandomDraftExperimentIdSource() }
     single<RecordedAtSource> { SystemRecordedAtSource() }
+    single<CurrentLocalDateSource> { RecordedAtCurrentLocalDateSource(recordedAtSource = get()) }
     single { CreateExperimentDraft(repository = get(), idSource = get(), recordedAtSource = get()) }
     single { EditExperimentDraft(repository = get(), recordedAtSource = get()) }
     single { RecordDailyCheckIn(repository = get(), recordedAtSource = get()) }
+    single { DeleteExperiment(repository = get()) }
+    single { GetCurrentLocalDate(source = get()) }
+    single<AppPreferenceRepository> { RuntimeAppPreferenceRepository() }
+    single { ObserveThemePreference(repository = get()) }
+    single { SetThemePreference(repository = get()) }
     if (isDebugBuild) {
         single {
             val databaseReadiness: DatabaseReadiness = get()
@@ -140,7 +168,7 @@ private fun habitLabModule(
         )
     }
     single { GetAppMetadata(repository = get()) }
-    factory { AppPresenter(getAppMetadata = get()) }
+    factory { AppPresenter(getAppMetadata = get(), observeThemePreference = get()) }
     factory { ComponentGalleryUiMapper() }
     factory {
         ComponentGalleryViewModel(
@@ -148,6 +176,43 @@ private fun habitLabModule(
             uiMapper = get(),
         )
     }
+    factory { ExperimentListUiMapper() }
+    factory { ExperimentListViewModel(experimentListObserver = get(), uiMapper = get()) }
+    factory { ExperimentDetailsUiMapper() }
+    factory { parameters ->
+        ExperimentDetailsViewModel(
+            experimentId = parameters.get(),
+            projectionObserver = get(),
+            getCurrentLocalDate = get(),
+            uiMapper = get(),
+        )
+    }
+    factory { ExperimentEditorUiMapper() }
+    factory { parameters ->
+        ExperimentEditorViewModel(
+            experimentId = parameters.get<ExperimentEditorEntryArguments>().experimentId,
+            projectionObserver = get(),
+            createExperimentDraft = get(),
+            editExperimentDraft = get(),
+            uiMapper = get(),
+        )
+    }
+    factory { DailyCheckInUiMapper() }
+    factory { parameters ->
+        DailyCheckInViewModel(
+            experimentId = parameters.get(),
+            localDate = parameters.get(),
+            dailyCheckInObserver = get(),
+            recordDailyCheckIn = get(),
+            uiMapper = get(),
+        )
+    }
+    factory { SettingsUiMapper() }
+    factory { SettingsViewModel(observeThemePreference = get(), setThemePreference = get(), uiMapper = get()) }
+    factory { parameters ->
+        MetricPickerViewModel(experimentId = parameters.get<MetricPickerEntryArguments>().experimentId)
+    }
+    factory { parameters -> ConfirmDeleteViewModel(experimentId = parameters.get(), deleteExperiment = get()) }
     factory { NavigationExperimentUiMapper() }
     factory { parameters ->
         NavigationExperimentViewModel(

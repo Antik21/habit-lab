@@ -2,6 +2,7 @@ package com.denis.habitlab.shared.data.repository
 
 import com.denis.habitlab.shared.domain.interactor.RecordedAtSource
 import com.denis.habitlab.shared.domain.interactor.ExperimentIdSource
+import com.denis.habitlab.shared.domain.interactor.CurrentLocalDateSource
 import com.denis.habitlab.shared.domain.model.RecordedAt
 import com.denis.habitlab.shared.domain.model.ExperimentId
 import kotlinx.datetime.TimeZone
@@ -39,4 +40,10 @@ internal class RandomDraftExperimentIdSource(
         const val DRAFT_RANDOM_LENGTH = 20
         const val DRAFT_ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyz"
     }
+}
+
+internal class RecordedAtCurrentLocalDateSource(
+    private val recordedAtSource: RecordedAtSource,
+) : CurrentLocalDateSource {
+    override fun current() = recordedAtSource.now().localDate
 }

@@ -41,6 +41,48 @@ enum class AutomationId(
     NavigationDialogCancel("habitlab.navigation.dialog.action.cancel"),
     NavigationDialogResultConfirmed("habitlab.navigation.dialog.result.confirmed"),
     NavigationDialogResultCancelled("habitlab.navigation.dialog.result.cancelled"),
+    ExperimentListScreenRoot("habitlab.experiment-list.screen.root"),
+    ExperimentListOpenSettings("habitlab.experiment-list.action.open-settings"),
+    ExperimentListCreate("habitlab.experiment-list.action.create"),
+    ExperimentListLoading("habitlab.experiment-list.state.loading"),
+    ExperimentListEmpty("habitlab.experiment-list.state.empty"),
+    ExperimentListError("habitlab.experiment-list.state.error"),
+    ExperimentListRow("habitlab.experiment-list.row"),
+    ExperimentDetailsScreenRoot("habitlab.experiment-details.screen.root"),
+    ExperimentDetailsBack("habitlab.experiment-details.action.back"),
+    ExperimentDetailsEdit("habitlab.experiment-details.action.edit"),
+    ExperimentDetailsCheckIn("habitlab.experiment-details.action.check-in"),
+    ExperimentDetailsDelete("habitlab.experiment-details.action.delete"),
+    ExperimentDetailsLoading("habitlab.experiment-details.state.loading"),
+    ExperimentDetailsError("habitlab.experiment-details.state.error"),
+    ExperimentEditorScreenRoot("habitlab.experiment-editor.screen.root"),
+    ExperimentEditorBack("habitlab.experiment-editor.action.back"),
+    ExperimentEditorName("habitlab.experiment-editor.field.name"),
+    ExperimentEditorMetric("habitlab.experiment-editor.action.metric"),
+    ExperimentEditorSave("habitlab.experiment-editor.action.save"),
+    ExperimentEditorLoading("habitlab.experiment-editor.state.loading"),
+    ExperimentEditorError("habitlab.experiment-editor.state.error"),
+    ExperimentEditorValidation("habitlab.experiment-editor.state.validation"),
+    DailyCheckInScreenRoot("habitlab.daily-check-in.screen.root"),
+    DailyCheckInBack("habitlab.daily-check-in.action.back"),
+    DailyCheckInPerformed("habitlab.daily-check-in.action.performed"),
+    DailyCheckInSkipped("habitlab.daily-check-in.action.skipped"),
+    DailyCheckInSave("habitlab.daily-check-in.action.save"),
+    DailyCheckInLoading("habitlab.daily-check-in.state.loading"),
+    DailyCheckInError("habitlab.daily-check-in.state.error"),
+    SettingsScreenRoot("habitlab.settings.screen.root"),
+    SettingsBack("habitlab.settings.action.back"),
+    SettingsThemeSystem("habitlab.settings.theme.system"),
+    SettingsThemeLight("habitlab.settings.theme.light"),
+    SettingsThemeDark("habitlab.settings.theme.dark"),
+    MetricPickerScreenRoot("habitlab.metric-picker.screen.root"),
+    MetricPickerEnergy("habitlab.metric-picker.action.energy"),
+    MetricPickerSleep("habitlab.metric-picker.action.sleep"),
+    MetricPickerCancel("habitlab.metric-picker.action.cancel"),
+    ConfirmDeleteScreenRoot("habitlab.confirm-delete.screen.root"),
+    ConfirmDeleteConfirm("habitlab.confirm-delete.action.confirm"),
+    ConfirmDeleteCancel("habitlab.confirm-delete.action.cancel"),
+    ConfirmDeleteError("habitlab.confirm-delete.state.error"),
     ;
 
     internal companion object {
@@ -57,8 +99,26 @@ enum class AutomationId(
         private val SUPPORTED_NAMESPACES = listOf(
             "habitlab.gallery.",
             "habitlab.navigation.",
+            "habitlab.experiment-list.",
+            "habitlab.experiment-details.",
+            "habitlab.experiment-editor.",
+            "habitlab.daily-check-in.",
+            "habitlab.settings.",
+            "habitlab.metric-picker.",
+            "habitlab.confirm-delete.",
         )
     }
+}
+
+/** Selectors for DEN-12's real Experiment List root. */
+object ExperimentListAutomationIds {
+    val screenRoot = AutomationId.ExperimentListScreenRoot
+    val openSettings = AutomationId.ExperimentListOpenSettings
+    val create = AutomationId.ExperimentListCreate
+    val loading = AutomationId.ExperimentListLoading
+    val empty = AutomationId.ExperimentListEmpty
+    val error = AutomationId.ExperimentListError
+    val row = AutomationId.ExperimentListRow
 }
 
 /** Fixed selectors exposed by the shared production Navigation 3 shell. */

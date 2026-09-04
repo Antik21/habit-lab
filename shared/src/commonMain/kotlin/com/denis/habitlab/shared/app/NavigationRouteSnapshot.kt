@@ -27,7 +27,7 @@ private data class NavigationRouteSnapshot(
  * impossible data is discarded before Nav3 receives it, leaving a known Gallery root instead.
  */
 internal object NavigationRouteSnapshotCodec {
-    private const val currentVersion = 1
+    private const val currentVersion = 2
     private const val maxRouteCount = 12
     private val json = Json {
         encodeDefaults = true
@@ -77,18 +77,19 @@ internal object NavigationRouteSnapshotCodec {
             previous == AppDestination.Gallery &&
                 ExperimentId.fromInternalValue(destination.experimentId.value) != null
         }
-
-        is AppDestination.FlowStepOne -> when (previous) {
-            AppDestination.Gallery -> destination.flowId == FlowId.gallerySetup()
-            is AppDestination.Experiment -> destination.flowId == FlowId.forExperiment(previous.experimentId)
+        is AppDestination.ExperimentEditor -> when (previous) {
+            AppDestination.Gallery -> destination.experimentId == null
+            is AppDestination.Experiment -> destination.experimentId == previous.experimentId
             else -> false
         }
-
-        is AppDestination.FlowStepTwo -> previous == AppDestination.FlowStepOne(destination.flowId)
-        is AppDestination.ConfirmExperiment -> {
-            previous == AppDestination.Experiment(destination.experimentId) &&
-                ExperimentId.fromInternalValue(destination.experimentId.value) != null
-        }
+        is AppDestination.DailyCheckIn -> previous is AppDestination.Experiment &&
+            previous.experimentId == destination.experimentId &&
+            runCatching { destination.localDate.toLocalDate() }.isSuccess
+        AppDestination.Settings -> previous == AppDestination.Gallery
+        is AppDestination.MetricPicker -> previous is AppDestination.ExperimentEditor &&
+            previous.experimentId == destination.experimentId
+        is AppDestination.ConfirmDelete -> previous is AppDestination.Experiment &&
+            previous.experimentId == destination.experimentId
     }
 
     private fun root(): List<AppDestination> = listOf(AppDestination.Gallery)

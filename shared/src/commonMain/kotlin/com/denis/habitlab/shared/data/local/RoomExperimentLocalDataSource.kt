@@ -45,6 +45,8 @@ internal class RoomExperimentLocalDataSource(
     suspend fun recordDailyCheckIn(entity: CheckInEntity): Boolean =
         dao.recordDailyCheckIn(entity)
 
+    suspend fun deleteExperiment(experimentId: String): Boolean = dao.deleteExperimentIfPresent(experimentId)
+
     suspend fun seedIfEmpty(): Boolean = dao.seedIfEmpty(DebugSeed.fixed)
 
     suspend fun resetAndSeed() {
