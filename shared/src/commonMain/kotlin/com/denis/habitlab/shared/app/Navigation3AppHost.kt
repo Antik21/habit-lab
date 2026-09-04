@@ -20,11 +20,11 @@ import com.denis.habitlab.shared.presentation.gallery.ComponentGalleryScreen
 import com.denis.habitlab.shared.presentation.gallery.ComponentGalleryViewModel
 import com.denis.habitlab.shared.presentation.gallery.NavigationEffect as GalleryNavigationEffect
 import com.denis.habitlab.shared.presentation.navigation.ExperimentDialogResult as NavigationDialogResult
-import com.denis.habitlab.shared.presentation.navigation.NavigationDialogResultDisplay
 import com.denis.habitlab.shared.presentation.navigation.confirmation.NavigationConfirmationDialogScreen
 import com.denis.habitlab.shared.presentation.navigation.confirmation.NavigationConfirmationDialogViewModel
 import com.denis.habitlab.shared.presentation.navigation.confirmation.NavigationEffect as ConfirmationNavigationEffect
 import com.denis.habitlab.shared.presentation.navigation.experiment.NavigationEffect as ExperimentNavigationEffect
+import com.denis.habitlab.shared.presentation.navigation.experiment.NavigationDialogResultDisplay
 import com.denis.habitlab.shared.presentation.navigation.experiment.NavigationExperimentScreen
 import com.denis.habitlab.shared.presentation.navigation.experiment.NavigationExperimentViewModel
 import com.denis.habitlab.shared.presentation.navigation.flow.stepone.NavigationEffect as FlowStepOneNavigationEffect
@@ -111,6 +111,7 @@ internal fun Navigation3AppHost(
                 ComponentGalleryScreen(
                     appTitle = appTitle,
                     viewModel = viewModel,
+                    isNavigationActionAllowed = rememberIsNavigationActionAllowed(),
                     handleNavigationAction = navigator::handleGalleryEffect,
                 )
             }
@@ -127,6 +128,7 @@ internal fun Navigation3AppHost(
                     viewModel = viewModel,
                     deliveredDialogResult = delivery?.result,
                     dialogResult = visibleDialogResult.displayFor(route.experimentId),
+                    isNavigationActionAllowed = rememberIsNavigationActionAllowed(),
                     onDialogResultConsumed = {
                         if (pendingDialogDelivery?.id == delivery?.id) {
                             pendingDialogDelivery = null
@@ -148,6 +150,7 @@ internal fun Navigation3AppHost(
 
                 NavigationFlowStepOneScreen(
                     viewModel = viewModel,
+                    isNavigationActionAllowed = rememberIsNavigationActionAllowed(),
                     handleNavigationAction = { effect ->
                         navigator.handleFlowStepOneEffect(route, effect)
                     },
@@ -161,6 +164,7 @@ internal fun Navigation3AppHost(
 
                 NavigationFlowStepTwoScreen(
                     viewModel = viewModel,
+                    isNavigationActionAllowed = rememberIsNavigationActionAllowed(),
                     handleNavigationAction = { effect ->
                         navigator.handleFlowStepTwoEffect(route, effect)
                     },
@@ -176,6 +180,7 @@ internal fun Navigation3AppHost(
 
                 NavigationConfirmationDialogScreen(
                     viewModel = viewModel,
+                    isNavigationActionAllowed = rememberIsNavigationActionAllowed(),
                     handleNavigationAction = { effect ->
                         navigator.handleConfirmationEffect(route, effect)
                     },

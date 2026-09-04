@@ -30,6 +30,7 @@ import org.orbitmvi.orbit.compose.collectSideEffect
 @Composable
 fun NavigationFlowStepOneScreen(
     viewModel: NavigationFlowStepOneViewModel,
+    isNavigationActionAllowed: () -> Boolean,
     handleNavigationAction: suspend (NavigationEffect) -> Unit,
 ) {
     val state by viewModel.collectAsState()
@@ -38,7 +39,14 @@ fun NavigationFlowStepOneScreen(
             is NavigationEffect -> handleNavigationAction(effect)
         }
     }
-    Content(state = state, onAction = viewModel::dispatchAction)
+    Content(
+        state = state,
+        onAction = { action ->
+            if (isNavigationActionAllowed()) {
+                viewModel.dispatchAction(action)
+            }
+        },
+    )
 }
 
 @Composable

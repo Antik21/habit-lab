@@ -146,6 +146,12 @@ class ArchitectureBoundaryCheckerTest {
                 }
             """.trimIndent(),
         )
+        val allowedInRootPackage = source(
+            relativePath =
+                "src/commonMain/kotlin/com/denis/habitlab/shared/presentation/RootViewModel.kt",
+            packageName = "$sharedRoot.presentation",
+            body = "import androidx.lifecycle.ViewModel\nclass RootViewModel : ViewModel()",
+        )
         val suffixBypass = source(
             relativePath = "$viewModelPath.bak",
             packageName = "$sharedRoot.presentation.navigation.entry",
@@ -157,7 +163,7 @@ class ArchitectureBoundaryCheckerTest {
             body = "import androidx.lifecycle.ViewModel\nclass EntryViewModel : ViewModel()",
         )
 
-        assertEquals(emptyList(), checker.findViolations(listOf(allowed)))
+        assertEquals(emptyList(), checker.findViolations(listOf(allowed, allowedInRootPackage)))
         assertEquals(
             listOf(
                 "$viewModelPath.bak: presentation must not use native or infrastructure APIs",

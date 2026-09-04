@@ -41,6 +41,7 @@ import org.orbitmvi.orbit.compose.collectSideEffect
 fun ComponentGalleryScreen(
     appTitle: String,
     viewModel: ComponentGalleryViewModel,
+    isNavigationActionAllowed: () -> Boolean,
     handleNavigationAction: suspend (NavigationEffect) -> Unit,
 ) {
     val state by viewModel.collectAsState()
@@ -58,7 +59,11 @@ fun ComponentGalleryScreen(
         appTitle = appTitle,
         state = state,
         isDialogVisible = isDialogVisible,
-        onAction = viewModel::dispatchAction,
+        onAction = { action ->
+            if (!action.requiresResumedEntry() || isNavigationActionAllowed()) {
+                viewModel.dispatchAction(action)
+            }
+        },
     )
 }
 
@@ -121,6 +126,18 @@ private fun Content(
             onDismiss = { onAction(Action.DialogDismissed) },
         )
     }
+}
+
+private fun Action.requiresResumedEntry(): Boolean = when (this) {
+    Action.BackClicked,
+    Action.StartFlowClicked,
+    is Action.ExperimentClicked,
+    -> true
+    Action.DialogRequested,
+    Action.DialogConfirmed,
+    Action.DialogDismissed,
+    is Action.HabitNameChanged,
+    -> false
 }
 
 @Preview

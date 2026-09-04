@@ -318,8 +318,11 @@ class ArchitectureBoundaryChecker {
     private fun isLifecyclePresentationViewModel(
         source: ArchitectureSource,
         packageName: String,
-    ): Boolean = packageName.startsWith("$sharedRootPackage.presentation.") &&
-        presentationViewModelPath.matches(source.relativePath)
+    ): Boolean =
+        (
+            packageName == "$sharedRootPackage.presentation" ||
+                packageName.startsWith("$sharedRootPackage.presentation.")
+        ) && presentationViewModelPath.matches(source.relativePath)
 
     /**
      * Presentation ViewModel files may use their common AndroidX ViewModel lifecycle only.

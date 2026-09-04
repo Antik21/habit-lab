@@ -3,11 +3,20 @@ package com.denis.habitlab.shared.presentation.navigation.experiment
 import androidx.compose.runtime.Immutable
 import com.denis.habitlab.shared.presentation.navigation.ExperimentDialogResult
 import com.denis.habitlab.shared.presentation.navigation.ExperimentId
+import com.denis.habitlab.shared.presentation.ui.automation.AutomationId
+import com.denis.habitlab.shared.presentation.ui.automation.NavigationSpikeAutomationIds
 
 @Immutable
 data class ViewState(
     val experimentId: String,
 )
+
+enum class NavigationDialogResultDisplay(
+    val automationId: AutomationId,
+) {
+    Confirmed(NavigationSpikeAutomationIds.dialogResultConfirmed),
+    Cancelled(NavigationSpikeAutomationIds.dialogResultCancelled),
+}
 
 sealed interface Action {
     data object BackClicked : Action

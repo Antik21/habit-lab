@@ -80,8 +80,9 @@ sealed interface ViewEffect : SideEffect
 
 Mapper — единственная точка сборки готового `ViewState` из domain-данных. Публичный метод — `map`,
 ветвление и форматирование разносить по приватным `build*`/`map*` функциям. ViewModel, Screen и
-секции не должны независимо дублировать domain -> UI правила. Compose resources можно разрешать в
-`Content`, когда текст полностью статичен и не зависит от domain-данных.
+секции не должны независимо дублировать domain -> UI правила. `Content` может разрешать статические
+Compose resources и локализованные шаблоны с уже подготовленными аргументами из `ViewState`;
+domain-ветвление, fallback-значения и подготовка аргументов остаются в mapper.
 
 ## `<Feature><Screen>ViewModel.kt`
 
