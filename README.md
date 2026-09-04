@@ -23,11 +23,11 @@ xcodebuild -project iosApp/iosApp.xcodeproj -scheme iosApp -sdk iphonesimulator 
 ```
 
 `App()` boots a shared, scrollable component gallery as its root destination. It demonstrates the
-common Material 3 theme, toolbar, buttons, text field, rows, loading/empty/error blocks, and a
-minimal Navigation 3 shell on both Android and iOS. Feature and layer Gradle modules are not created
-until a task specifically justifies them.
+common Material 3 theme, toolbar, buttons, text field, rows, loading/empty/error blocks, and the
+production Navigation 3 shell on both Android and iOS. Feature and layer Gradle modules are not
+created until a task specifically justifies them.
 
-## Navigation 3 compatibility spike
+## Production Navigation 3 shell
 
 The app uses the Compose Multiplatform artifact
 `org.jetbrains.androidx.navigation3:navigation3-ui:1.1.1` and one app-owned `NavBackStack` in
@@ -36,19 +36,26 @@ The app uses the Compose Multiplatform artifact
 state without the Android reflection overload. There is one `NavDisplay`; the dialog is a `DialogSceneStrategy` overlay
 and the two-step flow is represented by entries in that same stack.
 
-This retained code is a minimal compatibility/foundation harness for future DEN-10 work, rather than a
-complete production navigation graph. The spike exercised Android 16/API 36 and iOS 26.5 simulator
-flows for host lifecycle changes, deep links, settings round trips, dialogs, and back navigation.
-Android Activity recreation restores the stack; iOS preserves it across orientation changes but a
-terminated process currently starts at the gallery. The project still builds with an iOS 16.0
-deployment target; an iOS 16 runtime was not available for this run. These two iOS limitations and
-their migration path are recorded in
-[`docs/adr/0002-navigation3-ios-restoration-runtime.md`](docs/adr/0002-navigation3-ios-restoration-runtime.md).
+The host collects one-shot Orbit side effects from entry-scoped common AndroidX ViewModels and is the
+only code that mutates the app-owned Nav3 stack. Koin resolves ViewModels at the navigation entry
+composition boundary after Nav3 saved-state and ViewModel-store decorators establish ownership.
+Routes carry typed IDs only; an experiment re-reads its current projection through a domain observer,
+so `UiState` and screen data are never serialized into a route.
+
+A versioned common route snapshot persists the final validated stack after every completed navigation
+operation through `SharedPreferences` on Android and `NSUserDefaults` on iOS. Android serializes
+durable `SharedPreferences.commit()` calls on a background executor; Android Navigation 3 saved state
+remains active for Activity recreation. Corrupt, stale, unknown, or structurally invalid snapshots
+are discarded in favour of Gallery; completed dialog results are one-shot caller-scoped effects,
+never serialized state. The complete policy and release validation matrix are in
+[`docs/navigation/den-10-production-navigation-shell.md`](docs/navigation/den-10-production-navigation-shell.md).
 
 Android and iOS host layers only bridge external `habitlab://` URLs into common code and keep the
 active stack when opening application settings. The common parser accepts exactly
 `habitlab://experiment/daily-movement` or `habitlab://experiment/sleep-routine`; malformed, missing,
-or unknown URLs reset safely to the gallery. The detailed QA evidence template and commands are in
+or unknown URLs reset safely to the gallery. A handled bridge event is consumed by its exact ID, so a
+host remount cannot replay it while a repeated live URL still receives a new ID. Historical
+compatibility evidence remains in
 [`docs/spikes/den-9-navigation3-kmp.md`](docs/spikes/den-9-navigation3-kmp.md).
 
 The iOS host contains a small, temporary leading-edge gesture adapter because the Compose-provided

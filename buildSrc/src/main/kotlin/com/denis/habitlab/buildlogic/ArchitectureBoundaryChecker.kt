@@ -16,14 +16,16 @@ class ArchitectureBoundaryChecker {
     }
 
     private fun findViolations(source: ArchitectureSource): List<String> {
-        val code = stripKotlinCommentsAndStrings(source.content)
+        val code = normalizeQualifiedNameSeparators(
+            normalizeSimpleEscapedIdentifiers(stripKotlinCommentsAndStrings(source.content)),
+        )
         val packageName = packageDeclaration.find(code)?.groupValues?.get(1)
             ?: return listOf("${source.relativePath}: Kotlin source must declare a package")
         val violations = mutableListOf<String>()
         val isDiPackage = packageName == "$sharedRootPackage.di" ||
             packageName.startsWith("$sharedRootPackage.di.")
 
-        if (!isDiPackage && koinReference.containsMatchIn(code)) {
+        if (!isDiPackage && !isKoinCompositionRoot(source, packageName) && koinReference.containsMatchIn(code)) {
             violations += "${source.relativePath}: org.koin references are only allowed in di"
         }
 
@@ -63,7 +65,16 @@ class ArchitectureBoundaryChecker {
         if (layer == "domain" && coreOrDomainInfrastructure.containsMatchIn(code)) {
             violations += "${source.relativePath}: domain must remain pure common Kotlin"
         }
-        if (layer == "presentation" && presentationInfrastructure.containsMatchIn(code)) {
+        if (
+            layer == "presentation" &&
+            presentationInfrastructure.findAll(code).any { infrastructureReference ->
+                !isAllowedNavigationEntryLifecycleReference(
+                    source = source,
+                    packageName = packageName,
+                    reference = infrastructureReference.value,
+                )
+            }
+        ) {
             violations += "${source.relativePath}: presentation must not use native or infrastructure APIs"
         }
         if (layer == "presentation" && dataSourceOrDaoReference.containsMatchIn(code)) {
@@ -262,6 +273,14 @@ class ArchitectureBoundaryChecker {
         return result.toString()
     }
 
+    /** Kotlin permits whitespace and comments around dots in qualified names. */
+    private fun normalizeQualifiedNameSeparators(code: String): String =
+        code.replace(qualifiedNameSeparator, ".")
+
+    /** Backticks around otherwise ordinary identifier segments must not hide package references. */
+    private fun normalizeSimpleEscapedIdentifiers(code: String): String =
+        code.replace(simpleEscapedIdentifier) { match -> match.groupValues[1] }
+
     private fun hasRootPackageContent(code: String): Boolean {
         var fileAnnotationNesting = 0
 
@@ -290,10 +309,37 @@ class ArchitectureBoundaryChecker {
         return false
     }
 
+    /** App-owned navigation entries are the only non-DI common composition boundary allowed Koin. */
+    private fun isKoinCompositionRoot(source: ArchitectureSource, packageName: String): Boolean =
+        packageName == "$sharedRootPackage.app" &&
+            source.relativePath == navigationEntryKoinCompositionPath
+
+    /**
+     * Common AndroidX ViewModels are a deliberate presentation boundary for Nav3 entries. Keep the
+     * exception file-scoped so screens cannot acquire arbitrary lifecycle/platform dependencies.
+     */
+    private fun isLifecyclePresentationEntry(source: ArchitectureSource, packageName: String): Boolean =
+        packageName == "$sharedRootPackage.presentation.navigation" &&
+            source.relativePath == navigationEntryViewModelsPath
+
+    /**
+     * The exact Nav3 entry ViewModel file may use its common AndroidX ViewModel lifecycle only.
+     * Other presentation infrastructure (native APIs, networking, databases, or lifecycle APIs
+     * beyond this narrow owner/scope pair) must continue to fail the standard boundary check.
+     */
+    private fun isAllowedNavigationEntryLifecycleReference(
+        source: ArchitectureSource,
+        packageName: String,
+        reference: String,
+    ): Boolean = isLifecyclePresentationEntry(source, packageName) &&
+        reference in navigationEntryLifecycleReferences
+
     private companion object {
         const val sharedRootPackage = "com.denis.habitlab.shared"
         val layers = listOf("app", "core", "data", "di", "domain", "presentation")
         val packageDeclaration = Regex("(?m)^\\s*package\\s+([A-Za-z0-9_.]+)")
+        val qualifiedNameSeparator = Regex("(?<=[A-Za-z0-9_])\\s*\\.\\s*(?=[A-Za-z_])")
+        val simpleEscapedIdentifier = Regex("`([A-Za-z_][A-Za-z0-9_]*)`")
         val sharedLayerReference = Regex("com\\.denis\\.habitlab\\.shared\\.(app|core|data|di|domain|presentation)(?:\\.|\\b)")
         val allowedDependencies = mapOf(
             "core" to emptySet<String>(),
@@ -307,11 +353,19 @@ class ArchitectureBoundaryChecker {
             "(?<![A-Za-z0-9_.])(?:android\\.|androidx\\.|platform\\.|java\\.|kotlinx\\.cinterop\\.|kotlin\\.native\\.|org\\.jetbrains\\.compose\\.|org\\.orbit\\.|org\\.koin\\.|io\\.ktor\\.|okhttp3\\.|app\\.cash\\.sqldelight\\.|io\\.realm\\.|sqlite\\.)",
         )
         val presentationInfrastructure = Regex(
-            "(?<![A-Za-z0-9_.])(?:android\\.|androidx\\.(?!compose\\.)|platform\\.|java\\.|kotlinx\\.cinterop\\.|kotlin\\.native\\.|org\\.koin\\.|io\\.ktor\\.|okhttp3\\.|app\\.cash\\.sqldelight\\.|io\\.realm\\.|sqlite\\.)",
+            "(?<![A-Za-z0-9_.])(?:android\\.|androidx\\.(?!compose\\.)(?:[A-Za-z_][A-Za-z0-9_]*\\.)*[A-Za-z_][A-Za-z0-9_]*|platform\\.|java\\.|kotlinx\\.cinterop\\.|kotlin\\.native\\.|org\\.koin\\.|io\\.ktor\\.|okhttp3\\.|app\\.cash\\.sqldelight\\.|io\\.realm\\.|sqlite\\.)",
         )
         val dataSourceOrDaoReference = Regex(
             "\\b(?:Dao|DataSource|[A-Z][A-Za-z0-9_]*(?i:Dao|DataSource))\\b",
         )
         val koinReference = Regex("(?<![A-Za-z0-9_.])org\\.koin\\.")
+        const val navigationEntryKoinCompositionPath =
+            "src/commonMain/kotlin/com/denis/habitlab/shared/app/NavigationEntryKoinComposition.kt"
+        const val navigationEntryViewModelsPath =
+            "src/commonMain/kotlin/com/denis/habitlab/shared/presentation/navigation/NavigationEntryViewModels.kt"
+        val navigationEntryLifecycleReferences = setOf(
+            "androidx.lifecycle.ViewModel",
+            "androidx.lifecycle.viewModelScope",
+        )
     }
 }

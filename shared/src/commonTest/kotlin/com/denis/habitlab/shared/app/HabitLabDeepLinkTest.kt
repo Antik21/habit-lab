@@ -1,8 +1,12 @@
 package com.denis.habitlab.shared.app
 
 import com.denis.habitlab.shared.presentation.navigation.NavigationDialogResultDisplay
+import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
@@ -42,6 +46,7 @@ class HabitLabDeepLinkTest {
         assertEquals(ExperimentId("daily-movement"), ExperimentId.fromExternalValue("daily-movement"))
         assertEquals(ExperimentId("sleep-routine"), ExperimentId.fromExternalValue("sleep-routine"))
         assertNull(ExperimentId.fromExternalValue("unknown"))
+        assertFailsWith<IllegalArgumentException> { ExperimentId("unknown") }
     }
 
     @Test
@@ -77,14 +82,12 @@ class HabitLabDeepLinkTest {
     }
 
     @Test
-    fun nativeBackRequestsRemainDistinctEvents() {
+    fun nativeBackRequestsRemainDistinctEvents() = runBlocking {
         val bridge = AppNavigationEventBridge()
 
         bridge.requestBack()
-        val first = bridge.latestBackRequestId
         bridge.requestBack()
 
-        assertEquals(1L, first)
-        assertEquals(2L, bridge.latestBackRequestId)
+        assertEquals(listOf(Unit, Unit), bridge.backRequests.take(2).toList())
     }
 }

@@ -59,7 +59,7 @@ enum class AutomationId(
     }
 }
 
-/** Fixed selectors exposed by the shared Navigation 3 compatibility spike. */
+/** Fixed selectors exposed by the shared production Navigation 3 shell. */
 object NavigationSpikeAutomationIds {
     val experimentScreenRoot = AutomationId.NavigationExperimentScreenRoot
     val experimentToolbarBack = AutomationId.NavigationExperimentToolbarBack

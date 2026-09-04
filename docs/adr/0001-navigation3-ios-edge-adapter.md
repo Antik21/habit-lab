@@ -1,7 +1,7 @@
 # ADR 0001: Temporary iOS leading-edge back adapter
 
 - Status: Accepted
-- Scope: DEN-9 Navigation 3 compatibility spike
+- Scope: Retained DEN-9 compatibility decision; current DEN-10 navigation shell
 
 ## Context
 
