@@ -2,6 +2,7 @@ package com.denis.habitlab.shared.presentation.navigation.experiment
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.denis.habitlab.shared.domain.observer.ExperimentProjectionObservation
 import com.denis.habitlab.shared.domain.observer.ExperimentProjectionObserver
 import com.denis.habitlab.shared.presentation.navigation.ExperimentDialogResult
 import com.denis.habitlab.shared.presentation.navigation.ExperimentId
@@ -18,12 +19,11 @@ class NavigationExperimentViewModel(
     override val container: Container<ViewState, SideEffect> = viewModelScope.container(
         initialState = ViewState(experimentId = experimentId.value),
         onCreate = {
-            projectionObserver.observe(experimentId).collect { projection ->
-                if (projection == null) {
+            projectionObserver.observe(experimentId).collect { observation ->
+                val mappedState = uiMapper.map(observation, fallbackExperimentId = experimentId)
+                reduce { mappedState }
+                if (observation == ExperimentProjectionObservation.Missing) {
                     postSideEffect(NavigationEffect.PopToRoot)
-                } else {
-                    val mappedState = uiMapper.map(projection)
-                    reduce { mappedState }
                 }
             }
         },

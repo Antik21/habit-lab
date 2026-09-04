@@ -9,7 +9,15 @@ import com.denis.habitlab.shared.presentation.ui.automation.NavigationSpikeAutom
 @Immutable
 data class ViewState(
     val experimentId: String,
+    val content: ContentUiModel = ContentUiModel.Loading,
 )
+
+@Immutable
+sealed interface ContentUiModel {
+    data object Loading : ContentUiModel
+    data object Error : ContentUiModel
+    data class Available(val displayName: String) : ContentUiModel
+}
 
 enum class NavigationDialogResultDisplay(
     val automationId: AutomationId,

@@ -14,9 +14,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.tooling.preview.Preview
 import com.denis.habitlab.shared.presentation.gallery.sections.GalleryControlsSection
 import com.denis.habitlab.shared.presentation.gallery.sections.GalleryExperimentsSection
-import com.denis.habitlab.shared.presentation.gallery.sections.GalleryStatesSection
 import com.denis.habitlab.shared.presentation.navigation.rememberNavigationActionDispatcher
 import com.denis.habitlab.shared.presentation.ui.automation.ComponentGalleryAutomationIds
 import com.denis.habitlab.shared.presentation.ui.component.HabitLabAppScaffold
@@ -34,7 +34,6 @@ import habitlab.shared.generated.resources.gallery_dialog_title
 import habitlab.shared.generated.resources.gallery_intro
 import habitlab.shared.generated.resources.gallery_title
 import org.jetbrains.compose.resources.stringResource
-import androidx.compose.ui.tooling.preview.Preview
 import org.orbitmvi.orbit.compose.collectAsState
 import org.orbitmvi.orbit.compose.collectSideEffect
 
@@ -108,9 +107,9 @@ private fun Content(
                 onHabitNameChanged = { value -> onAction(Action.HabitNameChanged(value)) },
             )
             GalleryExperimentsSection(
+                model = state.experiments,
                 onExperimentClicked = { id -> onAction(Action.ExperimentClicked(id)) },
             )
-            GalleryStatesSection()
         }
     }
 
@@ -147,7 +146,13 @@ private fun Preview() {
     HabitLabTheme {
         Content(
             appTitle = "Habit Lab",
-            state = ViewState(habitName = "Morning walk"),
+            state = ViewState(
+                habitName = "Morning walk",
+                experiments = ExperimentsUiModel.Available(
+                    hasDailyMovement = true,
+                    hasSleepRoutine = true,
+                ),
+            ),
             isDialogVisible = false,
             onAction = {},
         )

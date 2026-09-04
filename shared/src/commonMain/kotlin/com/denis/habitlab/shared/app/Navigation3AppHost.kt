@@ -423,7 +423,7 @@ private class AppNavigator(
     }
 
     private suspend fun openExperiment(experimentId: ExperimentId) {
-        if (ExperimentId.fromExternalValue(experimentId.value) == null) {
+        if (ExperimentId.fromInternalValue(experimentId.value) == null) {
             popToRoot()
             return
         }

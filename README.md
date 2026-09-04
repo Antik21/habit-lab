@@ -85,3 +85,10 @@ conditionals and each target node is tagged directly rather than relying on the 
 ## Shared package boundaries
 
 The shared module keeps `core`, `domain`, `data`, `presentation`, `di`, and `app` as packages rather than Gradle modules. Run `./gradlew :shared:checkArchitectureBoundaries` to verify their common-source dependency directions; it is also part of `:shared:check`.
+
+## Offline-first experiment persistence
+
+DEN-11 adds a shared Room 3.0.2 + BundledSQLite local store for experiments and daily check-ins.
+The committed v1 schema, debug seed/reset contract, Android/iOS path ownership, persistence smoke
+procedure, release behavior, and v1 limitations are documented in
+[`docs/data/den-11-room-offline-first.md`](docs/data/den-11-room-offline-first.md).

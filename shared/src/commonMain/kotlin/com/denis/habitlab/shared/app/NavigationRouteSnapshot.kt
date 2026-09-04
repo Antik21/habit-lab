@@ -75,7 +75,7 @@ internal object NavigationRouteSnapshotCodec {
         AppDestination.Gallery -> false
         is AppDestination.Experiment -> {
             previous == AppDestination.Gallery &&
-                ExperimentId.fromExternalValue(destination.experimentId.value) != null
+                ExperimentId.fromInternalValue(destination.experimentId.value) != null
         }
 
         is AppDestination.FlowStepOne -> when (previous) {
@@ -87,7 +87,7 @@ internal object NavigationRouteSnapshotCodec {
         is AppDestination.FlowStepTwo -> previous == AppDestination.FlowStepOne(destination.flowId)
         is AppDestination.ConfirmExperiment -> {
             previous == AppDestination.Experiment(destination.experimentId) &&
-                ExperimentId.fromExternalValue(destination.experimentId.value) != null
+                ExperimentId.fromInternalValue(destination.experimentId.value) != null
         }
     }
 

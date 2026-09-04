@@ -6,7 +6,20 @@ import com.denis.habitlab.shared.presentation.navigation.ExperimentId
 @Immutable
 data class ViewState(
     val habitName: String = "",
+    val experiments: ExperimentsUiModel = ExperimentsUiModel.Loading,
 )
+
+@Immutable
+sealed interface ExperimentsUiModel {
+    data object Loading : ExperimentsUiModel
+    data object Empty : ExperimentsUiModel
+    data object Error : ExperimentsUiModel
+
+    data class Available(
+        val hasDailyMovement: Boolean,
+        val hasSleepRoutine: Boolean,
+    ) : ExperimentsUiModel
+}
 
 sealed interface Action {
     data object BackClicked : Action

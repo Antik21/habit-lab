@@ -22,30 +22,34 @@ import org.jetbrains.compose.resources.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 
 @Composable
-internal fun GalleryStatesSection() {
+internal fun GalleryStatesSection(state: GalleryState) {
     Column(verticalArrangement = Arrangement.spacedBy(HabitLabSpacing.Medium)) {
-        HabitLabLoadingBlock(
-            title = stringResource(Res.string.gallery_loading_title),
-            accessibilityLabel = stringResource(Res.string.gallery_loading_accessibility_label),
-            automationId = ComponentGalleryAutomationIds.loadingState,
-        )
-        HabitLabEmptyBlock(
-            title = stringResource(Res.string.gallery_empty_title),
-            message = stringResource(Res.string.gallery_empty_message),
-            accessibilityLabel = stringResource(Res.string.gallery_empty_accessibility_label),
-            automationId = ComponentGalleryAutomationIds.emptyState,
-        )
-        HabitLabErrorBlock(
-            title = stringResource(Res.string.gallery_error_title),
-            message = stringResource(Res.string.gallery_error_message),
-            accessibilityLabel = stringResource(Res.string.gallery_error_accessibility_label),
-            automationId = ComponentGalleryAutomationIds.errorState,
-        )
+        when (state) {
+            GalleryState.Loading -> HabitLabLoadingBlock(
+                title = stringResource(Res.string.gallery_loading_title),
+                accessibilityLabel = stringResource(Res.string.gallery_loading_accessibility_label),
+                automationId = ComponentGalleryAutomationIds.loadingState,
+            )
+            GalleryState.Empty -> HabitLabEmptyBlock(
+                title = stringResource(Res.string.gallery_empty_title),
+                message = stringResource(Res.string.gallery_empty_message),
+                accessibilityLabel = stringResource(Res.string.gallery_empty_accessibility_label),
+                automationId = ComponentGalleryAutomationIds.emptyState,
+            )
+            GalleryState.Error -> HabitLabErrorBlock(
+                title = stringResource(Res.string.gallery_error_title),
+                message = stringResource(Res.string.gallery_error_message),
+                accessibilityLabel = stringResource(Res.string.gallery_error_accessibility_label),
+                automationId = ComponentGalleryAutomationIds.errorState,
+            )
+        }
     }
 }
+
+internal enum class GalleryState { Loading, Empty, Error }
 
 @Preview
 @Composable
 private fun Preview() {
-    HabitLabTheme { GalleryStatesSection() }
+    HabitLabTheme { GalleryStatesSection(GalleryState.Empty) }
 }

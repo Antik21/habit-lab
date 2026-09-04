@@ -28,6 +28,8 @@ enum class AutomationId(
     NavigationExperimentOpenDialog("habitlab.navigation.experiment.action.open-dialog"),
     NavigationExperimentStartFlow("habitlab.navigation.experiment.action.start-flow"),
     NavigationExperimentOpenSettings("habitlab.navigation.experiment.action.open-settings"),
+    NavigationExperimentLoadingState("habitlab.navigation.experiment.state.loading"),
+    NavigationExperimentErrorState("habitlab.navigation.experiment.state.error"),
     NavigationFlowStepOneScreenRoot("habitlab.navigation.flow.step-one.screen.root"),
     NavigationFlowStepOneToolbarBack("habitlab.navigation.flow.step-one.toolbar.back"),
     NavigationFlowStepOneNext("habitlab.navigation.flow.step-one.action.next"),
@@ -66,6 +68,8 @@ object NavigationSpikeAutomationIds {
     val experimentOpenDialog = AutomationId.NavigationExperimentOpenDialog
     val experimentStartFlow = AutomationId.NavigationExperimentStartFlow
     val experimentOpenSettings = AutomationId.NavigationExperimentOpenSettings
+    val experimentLoadingState = AutomationId.NavigationExperimentLoadingState
+    val experimentErrorState = AutomationId.NavigationExperimentErrorState
     val flowStepOneScreenRoot = AutomationId.NavigationFlowStepOneScreenRoot
     val flowStepOneToolbarBack = AutomationId.NavigationFlowStepOneToolbarBack
     val flowStepOneNext = AutomationId.NavigationFlowStepOneNext
