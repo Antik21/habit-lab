@@ -88,6 +88,14 @@ conditionals and each target node is tagged directly rather than relying on the 
 
 The shared module keeps `core`, `domain`, `data`, `presentation`, `di`, and `app` as packages rather than Gradle modules. Run `./gradlew :shared:checkArchitectureBoundaries` to verify their common-source dependency directions; it is also part of `:shared:check`.
 
+## Shared business-logic verification
+
+Business-logic tests live in `shared/src/commonTest`, use only portable test dependencies, and run on
+both native targets in CI. The macOS job runs `./gradlew :shared:check :shared:iosSimulatorArm64Test`;
+the Android job runs the inherited common suite through `:shared:connectedAndroidDeviceTest` on one
+emulator. This is deliberately a narrow shared-business-logic gate: it does not add Android/iOS UI or
+navigation parity coverage, which remains separate work.
+
 ## Reference screen contracts
 
 DEN-12 adds one common Navigation 3 stack with route-only `ExperimentId` and typed local-date

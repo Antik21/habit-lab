@@ -79,6 +79,9 @@ kotlin {
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
+            implementation(libs.kotlinx.coroutines.test)
+            implementation(libs.turbine)
+            implementation(libs.orbit.test)
         }
         getByName("androidDeviceTest").dependencies {
             implementation(libs.androidx.test.runner)
