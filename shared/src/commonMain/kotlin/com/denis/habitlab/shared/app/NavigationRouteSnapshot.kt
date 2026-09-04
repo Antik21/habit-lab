@@ -4,7 +4,7 @@ import androidx.compose.runtime.Composable
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
-/** Platform capability for the small common route snapshot; it never receives screen UiState. */
+/** Platform capability for the small common route snapshot; it never receives screen ViewState. */
 internal interface NavigationRouteSnapshotStore {
     fun read(): String?
 

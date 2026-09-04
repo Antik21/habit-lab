@@ -131,10 +131,12 @@ class ArchitectureBoundaryCheckerTest {
     }
 
     @Test
-    fun `allows lifecycle only from the exact navigation entry view model boundary`() {
+    fun `allows lifecycle only from explicitly named presentation ViewModel files`() {
+        val viewModelPath =
+            "src/commonMain/kotlin/com/denis/habitlab/shared/presentation/navigation/entry/ExperimentViewModel.kt"
         val allowed = source(
-            relativePath = navigationEntryViewModelsPath,
-            packageName = "$sharedRoot.presentation.navigation",
+            relativePath = viewModelPath,
+            packageName = "$sharedRoot.presentation.navigation.entry",
             body = """
                 import androidx.lifecycle.ViewModel
                 import androidx.lifecycle.viewModelScope
@@ -145,12 +147,12 @@ class ArchitectureBoundaryCheckerTest {
             """.trimIndent(),
         )
         val suffixBypass = source(
-            relativePath = "$navigationEntryViewModelsPath.bak",
-            packageName = "$sharedRoot.presentation.navigation",
+            relativePath = "$viewModelPath.bak",
+            packageName = "$sharedRoot.presentation.navigation.entry",
             body = "import androidx.lifecycle.ViewModel\nclass EntryViewModel : ViewModel()",
         )
-        val wrongPackage = source(
-            relativePath = navigationEntryViewModelsPath,
+        val nonViewModelFile = source(
+            relativePath = viewModelPath.replace("ViewModel.kt", "Screen.kt"),
             packageName = "$sharedRoot.presentation.navigation.entry",
             body = "import androidx.lifecycle.ViewModel\nclass EntryViewModel : ViewModel()",
         )
@@ -158,20 +160,22 @@ class ArchitectureBoundaryCheckerTest {
         assertEquals(emptyList(), checker.findViolations(listOf(allowed)))
         assertEquals(
             listOf(
-                "$navigationEntryViewModelsPath.bak: presentation must not use native or infrastructure APIs",
+                "$viewModelPath.bak: presentation must not use native or infrastructure APIs",
             ),
             checker.findViolations(listOf(suffixBypass)),
         )
         assertEquals(
             listOf(
-                "$navigationEntryViewModelsPath: presentation must not use native or infrastructure APIs",
+                "${viewModelPath.replace("ViewModel.kt", "Screen.kt")}: presentation must not use native or infrastructure APIs",
             ),
-            checker.findViolations(listOf(wrongPackage)),
+            checker.findViolations(listOf(nonViewModelFile)),
         )
     }
 
     @Test
-    fun `rejects non allowlisted infrastructure from the exact navigation entry view model boundary`() {
+    fun `rejects non allowlisted infrastructure from a presentation ViewModel`() {
+        val viewModelPath =
+            "src/commonMain/kotlin/com/denis/habitlab/shared/presentation/navigation/entry/ExperimentViewModel.kt"
         val forbiddenReferences = listOf(
             "android.content.Context" to "Android native API",
             "platform.Foundation.NSObject" to "platform API",
@@ -187,14 +191,14 @@ class ArchitectureBoundaryCheckerTest {
 
         forbiddenReferences.forEach { (reference, description) ->
             val source = source(
-                relativePath = navigationEntryViewModelsPath,
-                packageName = "$sharedRoot.presentation.navigation",
+                relativePath = viewModelPath,
+                packageName = "$sharedRoot.presentation.navigation.entry",
                 body = "import $reference\nclass EntryViewModel",
             )
 
             assertEquals(
                 listOf(
-                    "$navigationEntryViewModelsPath: presentation must not use native or infrastructure APIs",
+                    "$viewModelPath: presentation must not use native or infrastructure APIs",
                 ),
                 checker.findViolations(listOf(source)),
                 description,
@@ -499,8 +503,6 @@ class ArchitectureBoundaryCheckerTest {
         const val sharedRoot = "com.denis.habitlab.shared"
         const val navigationEntryKoinCompositionPath =
             "src/commonMain/kotlin/com/denis/habitlab/shared/app/NavigationEntryKoinComposition.kt"
-        const val navigationEntryViewModelsPath =
-            "src/commonMain/kotlin/com/denis/habitlab/shared/presentation/navigation/NavigationEntryViewModels.kt"
         val layers = listOf("app", "core", "data", "di", "domain", "presentation")
         val allowedDependencies = mapOf(
             "core" to emptySet<String>(),

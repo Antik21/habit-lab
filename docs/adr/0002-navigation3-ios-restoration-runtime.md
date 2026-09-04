@@ -39,7 +39,7 @@ still takes precedence; Android's handled-URL marker prevents a stale launch Int
 the restored route. The common bridge consumes only the successfully handled event ID, so remounting
 a host cannot replay an old URL and a repeated live delivery remains distinct.
 
-Entry `UiState` is deliberately excluded. An entry receives a typed `ExperimentId` and re-reads its
+Entry `ViewState` is deliberately excluded. An entry receives a typed `ExperimentId` and re-reads its
 current projection through `ExperimentProjectionObserver`. A confirmation result is delivered after
 the dialog is popped to the immediate matching caller as an Orbit side effect. There is no pending
 dialog result to restore: a process interrupted while a dialog is visible restores the valid dialog
