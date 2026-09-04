@@ -42,7 +42,7 @@ class ExperimentDetailsViewModel(
     private fun onBackClicked() = intent { postSideEffect(NavigationEffect.Back) }
 
     private fun onEditClicked() = intent {
-        if ((state.content as? ContentUiModel.Available)?.status == com.denis.habitlab.shared.domain.model.ExperimentStatus.DRAFT) {
+        if ((state.content as? ContentUiModel.Available)?.status == com.denis.habitlab.shared.presentation.model.ExperimentStatusUiModel.DRAFT) {
             postSideEffect(NavigationEffect.OpenEditor(experimentId))
         }
     }

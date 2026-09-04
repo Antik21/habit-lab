@@ -6,7 +6,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
-import com.denis.habitlab.shared.domain.interactor.DailyCheckInIntent
+import com.denis.habitlab.shared.presentation.dailycheckin.CheckInSelectionUiModel
 import com.denis.habitlab.shared.presentation.ui.automation.AutomationId
 import com.denis.habitlab.shared.presentation.ui.component.HabitLabPrimaryButton
 import com.denis.habitlab.shared.presentation.ui.component.HabitLabSecondaryButton
@@ -19,7 +19,7 @@ import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun DailyCheckInOutcomeSection(
-    selected: DailyCheckInIntent,
+    selected: CheckInSelectionUiModel,
     enabled: Boolean,
     onPerformed: () -> Unit,
     onSkipped: () -> Unit,
@@ -30,18 +30,18 @@ internal fun DailyCheckInOutcomeSection(
             label = stringResource(Res.string.daily_check_in_performed),
             automationId = AutomationId.DailyCheckInPerformed,
             onClick = onPerformed,
-            enabled = enabled && selected != DailyCheckInIntent.PERFORMED,
+            enabled = enabled && selected != CheckInSelectionUiModel.PERFORMED,
         )
         HabitLabSecondaryButton(
             modifier = Modifier.fillMaxWidth(),
             label = stringResource(Res.string.daily_check_in_skipped),
             automationId = AutomationId.DailyCheckInSkipped,
             onClick = onSkipped,
-            enabled = enabled && selected != DailyCheckInIntent.SKIPPED,
+            enabled = enabled && selected != CheckInSelectionUiModel.SKIPPED,
         )
     }
 }
 
 @Preview
 @Composable
-private fun Preview() { HabitLabTheme { DailyCheckInOutcomeSection(DailyCheckInIntent.PERFORMED, true, {}, {}) } }
+private fun Preview() { HabitLabTheme { DailyCheckInOutcomeSection(CheckInSelectionUiModel.PERFORMED, true, {}, {}) } }

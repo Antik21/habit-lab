@@ -203,6 +203,7 @@ private fun habitLabModule(
             experimentId = parameters.get(),
             localDate = parameters.get(),
             dailyCheckInObserver = get(),
+            experimentProjectionObserver = get(),
             recordDailyCheckIn = get(),
             uiMapper = get(),
         )

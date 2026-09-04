@@ -14,7 +14,6 @@ import com.denis.habitlab.shared.presentation.dailycheckin.sections.DailyCheckIn
 import com.denis.habitlab.shared.presentation.dailycheckin.sections.DailyCheckInStatusSection
 import com.denis.habitlab.shared.presentation.navigation.rememberNavigationActionDispatcher
 import com.denis.habitlab.shared.presentation.ui.automation.AutomationId
-import com.denis.habitlab.shared.presentation.ui.automation.autodevId
 import com.denis.habitlab.shared.presentation.ui.component.HabitLabAppScaffold
 import com.denis.habitlab.shared.presentation.ui.component.HabitLabErrorBlock
 import com.denis.habitlab.shared.presentation.ui.component.HabitLabLoadingBlock
@@ -28,6 +27,9 @@ import habitlab.shared.generated.resources.daily_check_in_error_message
 import habitlab.shared.generated.resources.daily_check_in_error_title
 import habitlab.shared.generated.resources.daily_check_in_loading_accessibility
 import habitlab.shared.generated.resources.daily_check_in_loading_title
+import habitlab.shared.generated.resources.daily_check_in_read_error_accessibility
+import habitlab.shared.generated.resources.daily_check_in_read_error_message
+import habitlab.shared.generated.resources.daily_check_in_read_error_title
 import habitlab.shared.generated.resources.daily_check_in_title
 import habitlab.shared.generated.resources.navigation_back_accessibility_label
 import habitlab.shared.generated.resources.navigation_back_action_label
@@ -66,29 +68,33 @@ private fun Content(state: ViewState, onAction: (Action) -> Unit) {
             modifier = Modifier.fillMaxSize().padding(padding).padding(HabitLabSpacing.Large),
             verticalArrangement = Arrangement.spacedBy(HabitLabSpacing.Medium),
         ) {
-            Text(stringResource(Res.string.daily_check_in_date, state.localDate.toString()))
+            Text(stringResource(Res.string.daily_check_in_date, state.localDateDisplay))
             when (state.content) {
                 ContentUiModel.Loading -> HabitLabLoadingBlock(
                     stringResource(Res.string.daily_check_in_loading_title),
                     stringResource(Res.string.daily_check_in_loading_accessibility),
                     AutomationId.DailyCheckInLoading,
                 )
-                ContentUiModel.Error -> HabitLabErrorBlock(
-                    stringResource(Res.string.daily_check_in_error_title),
-                    stringResource(Res.string.daily_check_in_error_message),
-                    stringResource(Res.string.daily_check_in_error_accessibility),
+                ContentUiModel.ReadError -> HabitLabErrorBlock(
+                    stringResource(Res.string.daily_check_in_read_error_title),
+                    stringResource(Res.string.daily_check_in_read_error_message),
+                    stringResource(Res.string.daily_check_in_read_error_accessibility),
                     AutomationId.DailyCheckInError,
                 )
                 ContentUiModel.Ready -> {
-                    if (state.hasExistingCheckIn) DailyCheckInStatusSection(state.selectedIntent)
+                    state.persistedOutcome?.let { persistedOutcome ->
+                        DailyCheckInStatusSection(persistedOutcome)
+                    }
                     DailyCheckInOutcomeSection(
-                        state.selectedIntent, !state.isSaving,
+                        state.selectedOutcome, !state.isSaving,
                         onPerformed = { onAction(Action.PerformedClicked) },
                         onSkipped = { onAction(Action.SkippedClicked) },
                     )
-                    if (state.commandError) Text(
-                        modifier = Modifier.autodevId(AutomationId.DailyCheckInError),
-                        text = stringResource(Res.string.daily_check_in_error_message),
+                    if (state.commandError) HabitLabErrorBlock(
+                        stringResource(Res.string.daily_check_in_error_title),
+                        stringResource(Res.string.daily_check_in_error_message),
+                        stringResource(Res.string.daily_check_in_error_accessibility),
+                        AutomationId.DailyCheckInError,
                     )
                     DailyCheckInSaveSection(state.isSaving) { onAction(Action.SaveClicked) }
                 }
@@ -99,6 +105,4 @@ private fun Content(state: ViewState, onAction: (Action) -> Unit) {
 
 @Preview
 @Composable
-private fun Preview() {
-    HabitLabTheme { Content(ViewState(com.denis.habitlab.shared.domain.model.ExperimentId("daily-movement"), kotlinx.datetime.LocalDate(2026, 9, 5)), {}) }
-}
+private fun Preview() { HabitLabTheme { Content(ViewState(com.denis.habitlab.shared.domain.model.ExperimentId("daily-movement"), "2026-09-05"), {}) } }

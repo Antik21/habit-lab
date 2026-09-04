@@ -31,7 +31,7 @@ class ExperimentEditorViewModel(
         onCreate = {
             experimentId?.let { id ->
                 projectionObserver.observe(id).collect { observation ->
-                    reduce { uiMapper.map(observation, id, state) }
+                    reduce { uiMapper.map(observation, state) }
                     if (observation == ExperimentProjectionObservation.Missing) {
                         postSideEffect(NavigationEffect.PopToRoot)
                     }
@@ -54,7 +54,15 @@ class ExperimentEditorViewModel(
 
     private fun onNameChanged(value: String) = intent {
         if (!state.isSaving && state.content == ContentUiModel.Ready) {
-            reduce { state.copy(name = value, validationError = false, commandError = false) }
+            reduce {
+                state.copy(
+                    name = value,
+                    hasHydratedInitialName = true,
+                    isNameDirty = true,
+                    validationError = false,
+                    commandError = false,
+                )
+            }
         }
     }
 

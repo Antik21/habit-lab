@@ -2,7 +2,8 @@ package com.denis.habitlab.shared.presentation.experimentlist
 
 import androidx.compose.runtime.Immutable
 import com.denis.habitlab.shared.domain.model.ExperimentId
-import com.denis.habitlab.shared.domain.model.ExperimentStatus
+import com.denis.habitlab.shared.presentation.model.ExperimentStatusUiModel
+import kotlinx.collections.immutable.ImmutableList
 
 @Immutable
 data class ViewState(
@@ -14,14 +15,14 @@ sealed interface ContentUiModel {
     data object Loading : ContentUiModel
     data object Empty : ContentUiModel
     data object Error : ContentUiModel
-    data class Available(val experiments: List<ExperimentRowUiModel>) : ContentUiModel
+    data class Available(val experiments: ImmutableList<ExperimentRowUiModel>) : ContentUiModel
 }
 
 @Immutable
 data class ExperimentRowUiModel(
     val id: ExperimentId,
     val name: String,
-    val status: ExperimentStatus,
+    val status: ExperimentStatusUiModel,
 )
 
 sealed interface Action {

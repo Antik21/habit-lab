@@ -6,9 +6,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import com.denis.habitlab.shared.domain.model.ExperimentId
-import com.denis.habitlab.shared.domain.model.ExperimentStatus
 import com.denis.habitlab.shared.presentation.experimentlist.ContentUiModel
 import com.denis.habitlab.shared.presentation.experimentlist.ExperimentRowUiModel
+import com.denis.habitlab.shared.presentation.model.ExperimentStatusUiModel
 import com.denis.habitlab.shared.presentation.ui.automation.ExperimentListAutomationIds
 import com.denis.habitlab.shared.presentation.ui.component.HabitLabClickableListRow
 import com.denis.habitlab.shared.presentation.ui.component.HabitLabEmptyBlock
@@ -25,8 +25,7 @@ import habitlab.shared.generated.resources.experiment_list_error_message
 import habitlab.shared.generated.resources.experiment_list_error_title
 import habitlab.shared.generated.resources.experiment_list_loading_accessibility
 import habitlab.shared.generated.resources.experiment_list_loading_title
-import habitlab.shared.generated.resources.experiment_status_active
-import habitlab.shared.generated.resources.experiment_status_draft
+import kotlinx.collections.immutable.persistentListOf
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
@@ -56,7 +55,7 @@ internal fun ExperimentListContentSection(
             content.experiments.forEach { experiment ->
                 HabitLabClickableListRow(
                     title = experiment.name,
-                    supportingText = experiment.status.label(),
+                    supportingText = stringResource(experiment.status.labelResource),
                     accessibilityLabel = experiment.name,
                     automationId = ExperimentListAutomationIds.row,
                     onClick = { onExperimentClicked(experiment.id) },
@@ -66,19 +65,19 @@ internal fun ExperimentListContentSection(
     }
 }
 
-@Composable
-private fun ExperimentStatus.label(): String = when (this) {
-    ExperimentStatus.DRAFT -> stringResource(Res.string.experiment_status_draft)
-    ExperimentStatus.ACTIVE -> stringResource(Res.string.experiment_status_active)
-}
-
 @Preview
 @Composable
 private fun Preview() {
     HabitLabTheme {
         ExperimentListContentSection(
             content = ContentUiModel.Available(
-                listOf(ExperimentRowUiModel(ExperimentId("daily-movement"), "Daily movement", ExperimentStatus.ACTIVE)),
+                persistentListOf(
+                    ExperimentRowUiModel(
+                        ExperimentId("daily-movement"),
+                        "Daily movement",
+                        ExperimentStatusUiModel.ACTIVE,
+                    ),
+                ),
             ),
             onExperimentClicked = {},
         )

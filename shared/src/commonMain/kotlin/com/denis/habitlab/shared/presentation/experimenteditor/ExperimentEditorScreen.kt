@@ -29,6 +29,9 @@ import habitlab.shared.generated.resources.experiment_editor_error_message
 import habitlab.shared.generated.resources.experiment_editor_error_title
 import habitlab.shared.generated.resources.experiment_editor_loading_accessibility
 import habitlab.shared.generated.resources.experiment_editor_loading_title
+import habitlab.shared.generated.resources.experiment_editor_read_error_accessibility
+import habitlab.shared.generated.resources.experiment_editor_read_error_message
+import habitlab.shared.generated.resources.experiment_editor_read_error_title
 import habitlab.shared.generated.resources.navigation_back_accessibility_label
 import habitlab.shared.generated.resources.navigation_back_action_label
 import org.jetbrains.compose.resources.stringResource
@@ -89,10 +92,10 @@ private fun Content(state: ViewState, onAction: (Action) -> Unit) {
                     stringResource(Res.string.experiment_editor_loading_accessibility),
                     AutomationId.ExperimentEditorLoading,
                 )
-                ContentUiModel.Error -> HabitLabErrorBlock(
-                    stringResource(Res.string.experiment_editor_error_title),
-                    stringResource(Res.string.experiment_editor_error_message),
-                    stringResource(Res.string.experiment_editor_error_accessibility),
+                ContentUiModel.ReadError -> HabitLabErrorBlock(
+                    stringResource(Res.string.experiment_editor_read_error_title),
+                    stringResource(Res.string.experiment_editor_read_error_message),
+                    stringResource(Res.string.experiment_editor_read_error_accessibility),
                     AutomationId.ExperimentEditorError,
                 )
                 ContentUiModel.Ready -> {

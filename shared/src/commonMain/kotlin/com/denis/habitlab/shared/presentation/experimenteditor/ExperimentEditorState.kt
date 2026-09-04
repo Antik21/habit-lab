@@ -10,6 +10,8 @@ data class ViewState(
     val experimentId: ExperimentId?,
     val content: ContentUiModel = ContentUiModel.Ready,
     val name: String = "",
+    val hasHydratedInitialName: Boolean = experimentId == null,
+    val isNameDirty: Boolean = false,
     val metric: MetricKind? = null,
     val isSaving: Boolean = false,
     val validationError: Boolean = false,
@@ -20,7 +22,7 @@ data class ViewState(
 sealed interface ContentUiModel {
     data object Ready : ContentUiModel
     data object Loading : ContentUiModel
-    data object Error : ContentUiModel
+    data object ReadError : ContentUiModel
 }
 
 sealed interface Action {

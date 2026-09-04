@@ -2,7 +2,7 @@ package com.denis.habitlab.shared.presentation.experimentdetails
 
 import androidx.compose.runtime.Immutable
 import com.denis.habitlab.shared.domain.model.ExperimentId
-import com.denis.habitlab.shared.domain.model.ExperimentStatus
+import com.denis.habitlab.shared.presentation.model.ExperimentStatusUiModel
 import kotlinx.datetime.LocalDate
 import com.denis.habitlab.shared.presentation.navigation.DeleteDialogResult
 
@@ -18,7 +18,7 @@ sealed interface ContentUiModel {
     data object Error : ContentUiModel
     data class Available(
         val name: String,
-        val status: ExperimentStatus,
+        val status: ExperimentStatusUiModel,
     ) : ContentUiModel
 }
 

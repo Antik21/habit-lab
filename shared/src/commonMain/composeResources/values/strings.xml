@@ -85,6 +85,9 @@
     <string name="experiment_editor_error_title">Could not save experiment</string>
     <string name="experiment_editor_error_message">The local change was not saved.</string>
     <string name="experiment_editor_error_accessibility">Experiment editor error</string>
+    <string name="experiment_editor_read_error_title">Could not load draft</string>
+    <string name="experiment_editor_read_error_message">The draft is unavailable right now.</string>
+    <string name="experiment_editor_read_error_accessibility">Experiment editor loading error</string>
     <string name="experiment_editor_validation">Enter a name between 1 and 120 characters.</string>
     <string name="daily_check_in_title">Daily check-in</string>
     <string name="daily_check_in_date">Date: %1$s</string>
@@ -96,6 +99,9 @@
     <string name="daily_check_in_error_title">Could not save check-in</string>
     <string name="daily_check_in_error_message">The check-in was not recorded.</string>
     <string name="daily_check_in_error_accessibility">Daily check-in error</string>
+    <string name="daily_check_in_read_error_title">Could not load check-in</string>
+    <string name="daily_check_in_read_error_message">The current check-in is unavailable.</string>
+    <string name="daily_check_in_read_error_accessibility">Daily check-in loading error</string>
     <string name="daily_check_in_existing_performed">Recorded as performed</string>
     <string name="daily_check_in_existing_skipped">Recorded as skipped</string>
     <string name="settings_title">Settings</string>

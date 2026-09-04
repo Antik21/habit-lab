@@ -44,11 +44,4 @@ class ConfirmDeleteViewModel(
             postSideEffect(NavigationEffect.Resolve(DeleteDialogResult.Cancelled(experimentId)))
         }
     }
-
-    private fun resolve(result: DeleteDialogResult) = intent {
-        if (!hasResolved) {
-            hasResolved = true
-            postSideEffect(NavigationEffect.Resolve(result))
-        }
-    }
 }

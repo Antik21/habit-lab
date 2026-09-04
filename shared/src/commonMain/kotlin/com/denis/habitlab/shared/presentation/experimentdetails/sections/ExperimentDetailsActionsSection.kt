@@ -6,7 +6,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
-import com.denis.habitlab.shared.domain.model.ExperimentStatus
+import com.denis.habitlab.shared.presentation.model.ExperimentStatusUiModel
 import com.denis.habitlab.shared.presentation.ui.automation.AutomationId
 import com.denis.habitlab.shared.presentation.ui.component.HabitLabPrimaryButton
 import com.denis.habitlab.shared.presentation.ui.component.HabitLabSecondaryButton
@@ -20,7 +20,7 @@ import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun ExperimentDetailsActionsSection(
-    status: ExperimentStatus,
+    status: ExperimentStatusUiModel,
     onEdit: () -> Unit,
     onCheckIn: () -> Unit,
     onDelete: () -> Unit,
@@ -37,7 +37,7 @@ internal fun ExperimentDetailsActionsSection(
             label = stringResource(Res.string.experiment_details_edit),
             automationId = AutomationId.ExperimentDetailsEdit,
             onClick = onEdit,
-            enabled = status == ExperimentStatus.DRAFT,
+            enabled = status == ExperimentStatusUiModel.DRAFT,
         )
         HabitLabSecondaryButton(
             modifier = Modifier.fillMaxWidth(),
@@ -51,5 +51,5 @@ internal fun ExperimentDetailsActionsSection(
 @Preview
 @Composable
 private fun Preview() {
-    HabitLabTheme { ExperimentDetailsActionsSection(ExperimentStatus.DRAFT, {}, {}, {}) }
+    HabitLabTheme { ExperimentDetailsActionsSection(ExperimentStatusUiModel.DRAFT, {}, {}, {}) }
 }
