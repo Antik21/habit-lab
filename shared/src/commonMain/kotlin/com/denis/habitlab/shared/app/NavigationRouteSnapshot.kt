@@ -8,9 +8,9 @@ import kotlinx.serialization.json.Json
 internal interface NavigationRouteSnapshotStore {
     fun read(): String?
 
-    fun write(encodedSnapshot: String)
+    suspend fun write(encodedSnapshot: String)
 
-    fun clear()
+    suspend fun clear()
 }
 
 @Composable
@@ -35,19 +35,18 @@ internal object NavigationRouteSnapshotCodec {
         classDiscriminator = "route"
     }
 
-    fun restore(store: NavigationRouteSnapshotStore): List<AppDestination> {
-        val encodedSnapshot = store.read() ?: return root()
+    fun restore(encodedSnapshot: String?): NavigationRouteRestore {
+        if (encodedSnapshot == null) return NavigationRouteRestore(routes = root())
         val snapshot = runCatching {
             json.decodeFromString(NavigationRouteSnapshot.serializer(), encodedSnapshot)
         }.getOrNull()
         if (snapshot == null || snapshot.version != currentVersion || !isValid(snapshot.routes)) {
-            store.clear()
-            return root()
+            return NavigationRouteRestore(routes = root(), shouldClearStoredSnapshot = true)
         }
-        return snapshot.routes
+        return NavigationRouteRestore(routes = snapshot.routes)
     }
 
-    fun persist(store: NavigationRouteSnapshotStore, routes: List<AppDestination>) {
+    suspend fun persist(store: NavigationRouteSnapshotStore, routes: List<AppDestination>) {
         if (!isValid(routes)) {
             store.clear()
             return
@@ -94,3 +93,9 @@ internal object NavigationRouteSnapshotCodec {
 
     private fun root(): List<AppDestination> = listOf(AppDestination.Gallery)
 }
+
+/** Restore output separates safe in-memory fallback from asynchronous platform invalidation. */
+internal data class NavigationRouteRestore(
+    val routes: List<AppDestination>,
+    val shouldClearStoredSnapshot: Boolean = false,
+)

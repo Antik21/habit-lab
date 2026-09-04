@@ -65,8 +65,13 @@ class ArchitectureBoundaryChecker {
         }
         if (
             layer == "presentation" &&
-            !isLifecyclePresentationEntry(source, packageName) &&
-            presentationInfrastructure.containsMatchIn(code)
+            presentationInfrastructure.findAll(code).any { infrastructureReference ->
+                !isAllowedNavigationEntryLifecycleReference(
+                    source = source,
+                    packageName = packageName,
+                    reference = infrastructureReference.value,
+                )
+            }
         ) {
             violations += "${source.relativePath}: presentation must not use native or infrastructure APIs"
         }
@@ -307,6 +312,18 @@ class ArchitectureBoundaryChecker {
         packageName == "$sharedRootPackage.presentation.navigation" &&
             source.relativePath == navigationEntryViewModelsPath
 
+    /**
+     * The exact Nav3 entry ViewModel file may use its common AndroidX ViewModel lifecycle only.
+     * Other presentation infrastructure (native APIs, networking, databases, or lifecycle APIs
+     * beyond this narrow owner/scope pair) must continue to fail the standard boundary check.
+     */
+    private fun isAllowedNavigationEntryLifecycleReference(
+        source: ArchitectureSource,
+        packageName: String,
+        reference: String,
+    ): Boolean = isLifecyclePresentationEntry(source, packageName) &&
+        reference in navigationEntryLifecycleReferences
+
     private companion object {
         const val sharedRootPackage = "com.denis.habitlab.shared"
         val layers = listOf("app", "core", "data", "di", "domain", "presentation")
@@ -324,7 +341,7 @@ class ArchitectureBoundaryChecker {
             "(?<![A-Za-z0-9_.])(?:android\\.|androidx\\.|platform\\.|java\\.|kotlinx\\.cinterop\\.|kotlin\\.native\\.|org\\.jetbrains\\.compose\\.|org\\.orbit\\.|org\\.koin\\.|io\\.ktor\\.|okhttp3\\.|app\\.cash\\.sqldelight\\.|io\\.realm\\.|sqlite\\.)",
         )
         val presentationInfrastructure = Regex(
-            "(?<![A-Za-z0-9_.])(?:android\\.|androidx\\.(?!compose\\.)|platform\\.|java\\.|kotlinx\\.cinterop\\.|kotlin\\.native\\.|org\\.koin\\.|io\\.ktor\\.|okhttp3\\.|app\\.cash\\.sqldelight\\.|io\\.realm\\.|sqlite\\.)",
+            "(?<![A-Za-z0-9_.])(?:android\\.|androidx\\.(?!compose\\.)(?:[A-Za-z_][A-Za-z0-9_]*\\.)*[A-Za-z_][A-Za-z0-9_]*|platform\\.|java\\.|kotlinx\\.cinterop\\.|kotlin\\.native\\.|org\\.koin\\.|io\\.ktor\\.|okhttp3\\.|app\\.cash\\.sqldelight\\.|io\\.realm\\.|sqlite\\.)",
         )
         val dataSourceOrDaoReference = Regex(
             "\\b(?:Dao|DataSource|[A-Z][A-Za-z0-9_]*(?i:Dao|DataSource))\\b",
@@ -334,5 +351,9 @@ class ArchitectureBoundaryChecker {
             "src/commonMain/kotlin/com/denis/habitlab/shared/app/NavigationEntryKoinComposition.kt"
         const val navigationEntryViewModelsPath =
             "src/commonMain/kotlin/com/denis/habitlab/shared/presentation/navigation/NavigationEntryViewModels.kt"
+        val navigationEntryLifecycleReferences = setOf(
+            "androidx.lifecycle.ViewModel",
+            "androidx.lifecycle.viewModelScope",
+        )
     }
 }

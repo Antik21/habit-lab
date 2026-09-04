@@ -6,7 +6,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.NavBackStack
 import androidx.navigation3.runtime.NavKey
@@ -32,7 +31,8 @@ import com.denis.habitlab.shared.presentation.navigation.NavigationExperimentDia
 import com.denis.habitlab.shared.presentation.navigation.NavigationExperimentScreen
 import com.denis.habitlab.shared.presentation.navigation.NavigationFlowStepOneScreen
 import com.denis.habitlab.shared.presentation.navigation.NavigationFlowStepTwoScreen
-import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.polymorphic
@@ -51,18 +51,19 @@ internal fun Navigation3AppHost(
 ) {
     val settingsCapability = rememberAppSettingsCapability()
     val snapshotStore = rememberNavigationRouteSnapshotStore()
-    val restoredRoutes = remember(snapshotStore) {
-        NavigationRouteSnapshotCodec.restore(snapshotStore)
+    val restoredSnapshot = remember(snapshotStore) {
+        NavigationRouteSnapshotCodec.restore(snapshotStore.read())
     }
     val backStack = rememberNavBackStack(
         navigationSavedStateConfiguration,
-        *restoredRoutes.toTypedArray(),
+        *restoredSnapshot.routes.toTypedArray(),
     )
     var pendingDialogDelivery by remember { mutableStateOf<DialogResultDelivery?>(null) }
     var visibleDialogResult by remember { mutableStateOf<NavigationDialogResult?>(null) }
-    val navigator = remember(backStack) {
+    val navigator = remember(backStack, snapshotStore) {
         AppNavigator(
             backStack = backStack,
+            snapshotStore = snapshotStore,
             onDialogResult = { delivery -> pendingDialogDelivery = delivery },
             onNavigationStarted = {
                 pendingDialogDelivery = null
@@ -73,17 +74,20 @@ internal fun Navigation3AppHost(
     val navigationEvent = navigationEvents.latestEvent
     val backRequestId = navigationEvents.latestBackRequestId
 
+    LaunchedEffect(restoredSnapshot.shouldClearStoredSnapshot, snapshotStore) {
+        if (restoredSnapshot.shouldClearStoredSnapshot) {
+            snapshotStore.clear()
+        }
+    }
     LaunchedEffect(navigationEvent?.id) {
-        navigationEvent?.let(navigator::handleExternalNavigation)
+        navigationEvent?.let { event ->
+            navigator.handleExternalNavigation(event)
+            navigationEvents.consume(event.id)
+        }
     }
     LaunchedEffect(backRequestId) {
         if (backRequestId > 0L) navigator.onBack()
     }
-    LaunchedEffect(backStack, snapshotStore) {
-        snapshotFlow { backStack.toList().filterIsInstance<AppDestination>() }
-            .collect { routes -> NavigationRouteSnapshotCodec.persist(snapshotStore, routes) }
-    }
-
     val entryDecorators = listOf(
         rememberSaveableStateHolderNavEntryDecorator<NavKey>(),
         rememberViewModelStoreNavEntryDecorator<NavKey>(),
@@ -209,7 +213,7 @@ internal fun Navigation3AppHost(
 
     NavDisplay(
         backStack = backStack,
-        onBack = navigator::onBack,
+        onBack = navigationEvents::requestBack,
         entryDecorators = entryDecorators,
         sceneStrategies = listOf(DialogSceneStrategy(), SinglePaneSceneStrategy()),
         entryProvider = entries,
@@ -262,6 +266,13 @@ class AppNavigationEventBridge {
         _latestEvent = ExternalNavigationEvent(id = nextEventId, rawUrl = rawUrl)
     }
 
+    /** Clears only the event just handled, preserving a newer live URL delivered concurrently. */
+    fun consume(eventId: Long) {
+        if (_latestEvent?.id == eventId) {
+            _latestEvent = null
+        }
+    }
+
     fun requestBack() {
         nextBackRequestId += 1
         _latestBackRequestId = nextBackRequestId
@@ -301,12 +312,13 @@ private data class DialogResultDelivery(
 
 private class AppNavigator(
     private val backStack: NavBackStack<NavKey>,
+    private val snapshotStore: NavigationRouteSnapshotStore,
     private val onDialogResult: (DialogResultDelivery) -> Unit,
     private val onNavigationStarted: () -> Unit,
 ) {
     private var nextDialogResultId = 0L
 
-    fun handleGalleryEffect(effect: GalleryUiSideEffect) {
+    suspend fun handleGalleryEffect(effect: GalleryUiSideEffect) {
         if (backStack.lastOrNull() != AppDestination.Gallery) {
             popToRoot()
             return
@@ -318,7 +330,10 @@ private class AppNavigator(
         }
     }
 
-    fun handleExperimentEffect(origin: AppDestination.Experiment, effect: ExperimentUiSideEffect) {
+    suspend fun handleExperimentEffect(
+        origin: AppDestination.Experiment,
+        effect: ExperimentUiSideEffect,
+    ) {
         if (backStack.lastOrNull() != origin) {
             popToRoot()
             return
@@ -332,7 +347,7 @@ private class AppNavigator(
         }
     }
 
-    fun handleFlowEffect(origin: AppDestination, effect: FlowUiSideEffect) {
+    suspend fun handleFlowEffect(origin: AppDestination, effect: FlowUiSideEffect) {
         if (backStack.lastOrNull() != origin) {
             popToRoot()
             return
@@ -345,7 +360,7 @@ private class AppNavigator(
         }
     }
 
-    fun handleConfirmationEffect(
+    suspend fun handleConfirmationEffect(
         origin: AppDestination.ConfirmExperiment,
         effect: ConfirmationDialogUiSideEffect,
     ) {
@@ -358,7 +373,7 @@ private class AppNavigator(
         }
     }
 
-    fun acceptDialogResult(
+    suspend fun acceptDialogResult(
         origin: AppDestination.Experiment,
         result: NavigationDialogResult,
     ): Boolean {
@@ -369,7 +384,7 @@ private class AppNavigator(
         return false
     }
 
-    fun onBack() {
+    suspend fun onBack() {
         when (val top = backStack.lastOrNull()) {
             is AppDestination.ConfirmExperiment -> {
                 resolveConfirmation(NavigationDialogResult.Cancelled(top.experimentId))
@@ -379,76 +394,84 @@ private class AppNavigator(
             else -> {
                 onNavigationStarted()
                 backStack.removeLast()
+                persistCompletedStack()
             }
         }
     }
 
-    fun handleExternalNavigation(event: ExternalNavigationEvent) {
+    suspend fun handleExternalNavigation(event: ExternalNavigationEvent) {
         onNavigationStarted()
         replaceWithRoot()
         HabitLabDeepLink.parse(event.rawUrl)?.let(backStack::add)
+        persistCompletedStack()
     }
 
-    private fun openExperiment(experimentId: ExperimentId) {
+    private suspend fun openExperiment(experimentId: ExperimentId) {
         if (ExperimentId.fromExternalValue(experimentId.value) == null) {
             popToRoot()
             return
         }
         onNavigationStarted()
         backStack += AppDestination.Experiment(experimentId)
+        persistCompletedStack()
     }
 
-    private fun startGalleryFlow() {
+    private suspend fun startGalleryFlow() {
         if (backStack.lastOrNull() != AppDestination.Gallery) {
             popToRoot()
             return
         }
         onNavigationStarted()
         backStack += AppDestination.FlowStepOne(FlowId.gallerySetup())
+        persistCompletedStack()
     }
 
-    private fun startExperimentFlow(experimentId: ExperimentId) {
+    private suspend fun startExperimentFlow(experimentId: ExperimentId) {
         if (backStack.lastOrNull() != AppDestination.Experiment(experimentId)) {
             popToRoot()
             return
         }
         onNavigationStarted()
         backStack += AppDestination.FlowStepOne(FlowId.forExperiment(experimentId))
+        persistCompletedStack()
     }
 
-    private fun advanceFlow(flowId: FlowId) {
+    private suspend fun advanceFlow(flowId: FlowId) {
         if (!FlowId.isSupported(flowId) || backStack.lastOrNull() != AppDestination.FlowStepOne(flowId)) {
             popToRoot()
             return
         }
         onNavigationStarted()
         backStack += AppDestination.FlowStepTwo(flowId)
+        persistCompletedStack()
     }
 
-    private fun completeFlow(flowId: FlowId) {
-        if (backStack.lastOrNull() != AppDestination.FlowStepTwo(flowId)) {
+    private suspend fun completeFlow(flowId: FlowId) {
+        val expectedStepOne = AppDestination.FlowStepOne(flowId)
+        if (
+            backStack.lastOrNull() != AppDestination.FlowStepTwo(flowId) ||
+            backStack.getOrNull(backStack.lastIndex - 1) != expectedStepOne
+        ) {
             popToRoot()
             return
         }
         onNavigationStarted()
         backStack.removeLast()
-        if (backStack.lastOrNull() == AppDestination.FlowStepOne(flowId)) {
-            backStack.removeLast()
-        } else {
-            popToRoot()
-        }
+        backStack.removeLast()
+        persistCompletedStack()
     }
 
-    private fun openConfirmation(experimentId: ExperimentId) {
+    private suspend fun openConfirmation(experimentId: ExperimentId) {
         if (backStack.lastOrNull() != AppDestination.Experiment(experimentId)) {
             popToRoot()
             return
         }
         onNavigationStarted()
         backStack += AppDestination.ConfirmExperiment(experimentId)
+        persistCompletedStack()
     }
 
-    private fun resolveConfirmation(result: NavigationDialogResult) {
+    private suspend fun resolveConfirmation(result: NavigationDialogResult) {
         val dialog = backStack.lastOrNull() as? AppDestination.ConfirmExperiment
         val caller = backStack.getOrNull(backStack.lastIndex - 1) as? AppDestination.Experiment
         if (dialog?.experimentId != result.experimentId || caller?.experimentId != result.experimentId) {
@@ -464,16 +487,28 @@ private class AppNavigator(
                 result = result,
             ),
         )
+        persistCompletedStack()
     }
 
-    private fun popToRoot() {
+    private suspend fun popToRoot() {
         onNavigationStarted()
         replaceWithRoot()
+        persistCompletedStack()
     }
 
     private fun replaceWithRoot() {
         backStack.clear()
         backStack += AppDestination.Gallery
+    }
+
+    /** Persists only complete, validated post-operation stacks; transient removals are never saved. */
+    private suspend fun persistCompletedStack() = withContext(NonCancellable) {
+        val destinations = backStack.map { it as? AppDestination }
+        if (destinations.any { it == null }) {
+            snapshotStore.clear()
+        } else {
+            NavigationRouteSnapshotCodec.persist(snapshotStore, destinations.filterNotNull())
+        }
     }
 }
 

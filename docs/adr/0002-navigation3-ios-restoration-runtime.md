@@ -19,9 +19,13 @@ screen state field.
 ## Decision
 
 The common app shell owns one versioned, route-only snapshot. It stores only the ordered
-`@Serializable AppDestination` keys and their typed IDs. Android writes the snapshot through an
-app-private `SharedPreferences` capability; iOS writes the same encoded payload through
-`NSUserDefaults`. No Android Activity or Swift type mirrors the stack.
+`@Serializable AppDestination` keys and their typed IDs. The single navigator writes a validated,
+final post-operation stack after every completed push, pop, root reset, dialog resolution, flow
+completion, or external URL transition; transitional remove/add states are never persisted. Android
+serializes `SharedPreferences.commit()` calls on a dedicated background executor and awaits that
+result without disk I/O on the UI thread. A failed replacement attempts to remove the key on that
+same executor so a known-stale valid route is not intentionally retained. iOS writes the same encoded
+payload through `NSUserDefaults`. No Android Activity or Swift type mirrors the stack.
 
 The restore codec accepts only version 1 snapshots that begin at Gallery and have a valid route
 sequence: allowlisted experiment IDs, correctly paired flow steps, and a dialog immediately above
@@ -31,7 +35,8 @@ or an overlong stack is cleared and replaced with Gallery before Navigation 3 se
 Navigation 3's saved-state configuration remains in place for normal Android Activity recreation.
 The compact capability snapshot covers Android/iOS process restoration. A fresh `ACTION_VIEW` URL
 still takes precedence; Android's handled-URL marker prevents a stale launch Intent from overwriting
-the restored route.
+the restored route. The common bridge consumes only the successfully handled event ID, so remounting
+a host cannot replay an old URL and a repeated live delivery remains distinct.
 
 Entry `UiState` is deliberately excluded. An entry receives a typed `ExperimentId` and re-reads its
 current projection through `ExperimentProjectionObserver`. A confirmation result is delivered after
@@ -45,6 +50,9 @@ Android system back and the temporary iOS leading-edge adapter continue to send 
 back event into the app-owned stack. The native files stay boundaries for OS events and storage
 only. The shell must retain the validator whenever a route is added, and a persisted-route version
 must increase if a future route format becomes incompatible.
+
+Durability remains best-effort if the platform cannot commit either the replacement or its cleanup;
+the next restore still validates any surviving payload and falls back to Gallery when it is invalid.
 
 The previous iOS 16 runtime limitation remains operational risk rather than a different policy: the
 target builds for iOS 16.0, but a runtime validation still requires an installed iOS 16 simulator or

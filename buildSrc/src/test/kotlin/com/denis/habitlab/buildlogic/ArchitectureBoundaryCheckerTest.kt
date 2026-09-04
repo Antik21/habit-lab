@@ -135,7 +135,14 @@ class ArchitectureBoundaryCheckerTest {
         val allowed = source(
             relativePath = navigationEntryViewModelsPath,
             packageName = "$sharedRoot.presentation.navigation",
-            body = "import androidx.lifecycle.ViewModel\nclass EntryViewModel : ViewModel()",
+            body = """
+                import androidx.lifecycle.ViewModel
+                import androidx.lifecycle.viewModelScope
+
+                class EntryViewModel : ViewModel() {
+                    fun launch() = viewModelScope
+                }
+            """.trimIndent(),
         )
         val suffixBypass = source(
             relativePath = "$navigationEntryViewModelsPath.bak",
@@ -161,6 +168,35 @@ class ArchitectureBoundaryCheckerTest {
             ),
             checker.findViolations(listOf(wrongPackage)),
         )
+    }
+
+    @Test
+    fun `rejects non allowlisted infrastructure from the exact navigation entry view model boundary`() {
+        val forbiddenReferences = listOf(
+            "android.content.Context" to "Android native API",
+            "platform.Foundation.NSObject" to "platform API",
+            "io.ktor.client.HttpClient" to "Ktor network API",
+            "okhttp3.OkHttpClient" to "OkHttp network API",
+            "app.cash.sqldelight.db.SqlDriver" to "database API",
+            "androidx.lifecycle.SavedStateHandle" to "other lifecycle API",
+            "androidx.lifecycle.viewmodel.CreationExtras" to "nested lifecycle API",
+        )
+
+        forbiddenReferences.forEach { (reference, description) ->
+            val source = source(
+                relativePath = navigationEntryViewModelsPath,
+                packageName = "$sharedRoot.presentation.navigation",
+                body = "import $reference\nclass EntryViewModel",
+            )
+
+            assertEquals(
+                listOf(
+                    "$navigationEntryViewModelsPath: presentation must not use native or infrastructure APIs",
+                ),
+                checker.findViolations(listOf(source)),
+                description,
+            )
+        }
     }
 
     @Test

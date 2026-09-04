@@ -42,17 +42,20 @@ composition boundary after Nav3 saved-state and ViewModel-store decorators estab
 Routes carry typed IDs only; an experiment re-reads its current projection through a domain observer,
 so `UiState` and screen data are never serialized into a route.
 
-A versioned common route snapshot persists validated routes/typed IDs through `SharedPreferences` on
-Android and `NSUserDefaults` on iOS. Android Navigation 3 saved state remains active for Activity
-recreation. Corrupt, stale, unknown, or structurally invalid snapshots are discarded in favour of
-Gallery; completed dialog results are one-shot caller-scoped effects, never serialized state. The
-complete policy and release validation matrix are in
+A versioned common route snapshot persists the final validated stack after every completed navigation
+operation through `SharedPreferences` on Android and `NSUserDefaults` on iOS. Android serializes
+durable `SharedPreferences.commit()` calls on a background executor; Android Navigation 3 saved state
+remains active for Activity recreation. Corrupt, stale, unknown, or structurally invalid snapshots
+are discarded in favour of Gallery; completed dialog results are one-shot caller-scoped effects,
+never serialized state. The complete policy and release validation matrix are in
 [`docs/navigation/den-10-production-navigation-shell.md`](docs/navigation/den-10-production-navigation-shell.md).
 
 Android and iOS host layers only bridge external `habitlab://` URLs into common code and keep the
 active stack when opening application settings. The common parser accepts exactly
 `habitlab://experiment/daily-movement` or `habitlab://experiment/sleep-routine`; malformed, missing,
-or unknown URLs reset safely to the gallery. Historical compatibility evidence remains in
+or unknown URLs reset safely to the gallery. A handled bridge event is consumed by its exact ID, so a
+host remount cannot replay it while a repeated live URL still receives a new ID. Historical
+compatibility evidence remains in
 [`docs/spikes/den-9-navigation3-kmp.md`](docs/spikes/den-9-navigation3-kmp.md).
 
 The iOS host contains a small, temporary leading-edge gesture adapter because the Compose-provided

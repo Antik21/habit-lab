@@ -12,11 +12,11 @@ internal actual fun rememberNavigationRouteSnapshotStore(): NavigationRouteSnaps
 private object IosNavigationRouteSnapshotStore : NavigationRouteSnapshotStore {
     override fun read(): String? = NSUserDefaults.standardUserDefaults.stringForKey(SNAPSHOT_KEY)
 
-    override fun write(encodedSnapshot: String) {
+    override suspend fun write(encodedSnapshot: String) {
         NSUserDefaults.standardUserDefaults.setObject(encodedSnapshot, SNAPSHOT_KEY)
     }
 
-    override fun clear() {
+    override suspend fun clear() {
         NSUserDefaults.standardUserDefaults.removeObjectForKey(SNAPSHOT_KEY)
     }
 
