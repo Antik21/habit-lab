@@ -13,6 +13,12 @@ actual fun rememberAppSettingsCapability(): AppSettingsCapability = remember {
 
 private object IosAppSettingsCapability : AppSettingsCapability {
     override fun openApplicationSettings() {
-        NSURL.URLWithString(UIApplicationOpenSettingsURLString)?.let(UIApplication.sharedApplication::openURL)
+        NSURL.URLWithString(UIApplicationOpenSettingsURLString)?.let { url ->
+            UIApplication.sharedApplication.openURL(
+                url = url,
+                options = emptyMap<Any?, Any>(),
+                completionHandler = null,
+            )
+        }
     }
 }

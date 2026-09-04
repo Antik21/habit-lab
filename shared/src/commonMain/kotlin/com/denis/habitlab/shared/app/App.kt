@@ -8,7 +8,7 @@ import com.denis.habitlab.shared.presentation.ui.theme.HabitLabTheme
 @Composable
 fun App(
     presenter: AppPresenter,
-    navigationEvents: AppNavigationEventBridge = remember { AppNavigationEventBridge() },
+    navigationEvents: AppNavigationEventBridge,
 ) {
     val appUiModel = remember(presenter) { presenter.present() }
 

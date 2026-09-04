@@ -18,8 +18,9 @@ flow, and the existing primary action still opens the legacy gallery dialog. The
 confirmation is a `DialogSceneStrategy` entry. Its typed result is delivered to its calling experiment
 only after that dialog entry is popped; system or gesture dismissal maps to `cancelled`.
 
-Navigation actions are ignored unless their entry is `RESUMED`, which prevents duplicate pushes while
-a transition is running. `HabitLabDeepLink` accepts only these exact routes:
+Entry-owned screen actions are ignored unless their entry is `RESUMED`, which prevents duplicate
+pushes while a transition is running. Platform back and external URL events are serialized separately
+through the common event bridge. `HabitLabDeepLink` accepts only these exact routes:
 
 - `habitlab://experiment/daily-movement`
 - `habitlab://experiment/sleep-routine`
@@ -57,16 +58,14 @@ separate terminate/relaunch probe correctly failed the step-2 assertion and show
 That negative result and the decision not to introduce a second persistence owner in this spike are
 recorded in [`../adr/0002-navigation3-ios-restoration-runtime.md`](../adr/0002-navigation3-ios-restoration-runtime.md).
 
-Maestro/XCUITest output was captured during the run under:
+An Android regression flow also delivered deep link A, then B, recreated the Activity in both
+orientations, and delivered B again. The typed B route remained current throughout, confirming that a
+stale launch Intent is not replayed over the restored stack.
 
-- `/private/tmp/habit-lab-den9-smoke/android-common-final`
-- `/private/tmp/habit-lab-den9-smoke/android-settings-final`
-- `/private/tmp/habit-lab-den9-smoke/android-restoration-final`
-- `/private/tmp/habit-lab-den9-smoke/ios-common-post-review`
-- `/private/tmp/habit-lab-den9-smoke/ios-settings-final`
-- `/private/tmp/habit-lab-den9-smoke/ios-restoration-post-review`
-- `/private/tmp/habit-lab-den9-smoke/ios-process-restoration-post-review`
-- `/private/tmp/habit-lab-den9-smoke/ios-edge-pan-result`
+The versioned matrix above is the retained brief test log. Each Pass was observed from a completed
+Maestro/XCUITest flow on the named target; the Partial result was reproduced with a controlled
+terminate/relaunch and a screenshot showing Gallery. Raw runner directories were machine-local and are
+not cited as durable artifacts. The selectors and commands below keep every scenario reproducible.
 
 Stable selectors live in the closed `AutomationId` enum under `habitlab.gallery.*` and
 `habitlab.navigation.*`; automation does not depend on display strings or runtime values.

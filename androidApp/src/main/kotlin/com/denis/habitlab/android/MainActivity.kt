@@ -9,13 +9,12 @@ import com.denis.habitlab.shared.app.AppNavigationEventBridge
 
 class MainActivity : ComponentActivity() {
     private val navigationEvents = AppNavigationEventBridge()
-    private var hasHandledActionViewIntent = false
-    private var lastHandledActionViewUrl: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        restoreHandledActionViewState(savedInstanceState)
-        dispatchInitialActionViewIntent(intent)
+        if (savedInstanceState == null) {
+            dispatchActionViewIntent(intent)
+        }
         setContent {
             App(
                 presenter = (application as HabitLabApplication).appPresenter,
@@ -30,55 +29,13 @@ class MainActivity : ComponentActivity() {
         dispatchActionViewIntent(intent)
     }
 
-    override fun onSaveInstanceState(outState: Bundle) {
-        super.onSaveInstanceState(outState)
-        outState.putBoolean(STATE_HAS_HANDLED_ACTION_VIEW, hasHandledActionViewIntent)
-        if (hasHandledActionViewIntent) {
-            outState.putString(STATE_LAST_ACTION_VIEW_URL, lastHandledActionViewUrl)
-        }
-    }
-
     /**
-     * State is retained outside the untrusted inbound Intent. On recreation the existing URL is
-     * skipped, but a different launch URL wins over restored navigation; live intents always run.
+     * Restored Activity instances keep the Nav3 saved stack and do not replay their launch URL.
+     * `singleTask` routes every live external request, including repeats, through `onNewIntent`.
      */
-    private fun dispatchInitialActionViewIntent(intent: Intent) {
-        if (intent.action == Intent.ACTION_VIEW) {
-            val rawUrl = intent.dataString
-            if (!hasHandledActionViewIntent || rawUrl != lastHandledActionViewUrl) {
-                dispatchActionViewUrl(rawUrl)
-            }
-        }
-    }
-
     private fun dispatchActionViewIntent(intent: Intent) {
         if (intent.action == Intent.ACTION_VIEW) {
-            dispatchActionViewUrl(intent.dataString)
+            navigationEvents.accept(intent.dataString)
         }
-    }
-
-    private fun dispatchActionViewUrl(rawUrl: String?) {
-        hasHandledActionViewIntent = true
-        lastHandledActionViewUrl = rawUrl
-        navigationEvents.accept(rawUrl)
-    }
-
-    private fun restoreHandledActionViewState(savedInstanceState: Bundle?) {
-        hasHandledActionViewIntent = savedInstanceState?.getBoolean(
-            STATE_HAS_HANDLED_ACTION_VIEW,
-            false,
-        ) ?: false
-        lastHandledActionViewUrl = if (hasHandledActionViewIntent) {
-            savedInstanceState?.getString(STATE_LAST_ACTION_VIEW_URL)
-        } else {
-            null
-        }
-    }
-
-    private companion object {
-        const val STATE_HAS_HANDLED_ACTION_VIEW =
-            "com.denis.habitlab.android.state.HAS_HANDLED_ACTION_VIEW"
-        const val STATE_LAST_ACTION_VIEW_URL =
-            "com.denis.habitlab.android.state.LAST_ACTION_VIEW_URL"
     }
 }

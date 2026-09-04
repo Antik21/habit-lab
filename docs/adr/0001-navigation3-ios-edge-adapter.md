@@ -22,11 +22,12 @@ The iOS host wraps the Compose controller with a temporary `UIPanGestureRecogniz
 - accepts only an inward, predominantly horizontal gesture;
 - completes after a 20%-width/48-point distance or 500-point-per-second velocity threshold;
 - emits a single `requestBack()` event and never owns or mirrors route state;
-- gives priority only over Compose's matching semantic-leading-edge back recognizer, leaving unrelated
-  screen-edge recognizers untouched.
+- adds a failure relationship only for runtime recognizer classes named `BackGestureRecognizer` on the
+  same semantic leading edge; recognizers outside that narrow match receive no priority mutation.
 
-The common `AppNavigator.onBack()` remains the sole place that pops the Nav3 stack and resolves a
-dialog dismissal as a typed cancellation.
+The common `AppNavigator.onBack()` remains the sole handler for platform back requests and resolves a
+dialog dismissal as a typed cancellation. Other explicit navigation operations still mutate the same
+single Nav3 stack through `AppNavigator`.
 
 ## Consequences and removal
 
