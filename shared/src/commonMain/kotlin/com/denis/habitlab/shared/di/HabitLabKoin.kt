@@ -1,11 +1,17 @@
 package com.denis.habitlab.shared.di
 
 import com.denis.habitlab.shared.core.platform.PlatformDescriptor
+import com.denis.habitlab.shared.data.observer.InMemoryExperimentProjectionObserver
 import com.denis.habitlab.shared.data.repository.AppMetadataRepositoryImpl
 import com.denis.habitlab.shared.data.repository.PlatformAppMetadataDataSource
 import com.denis.habitlab.shared.domain.interactor.GetAppMetadata
+import com.denis.habitlab.shared.domain.observer.ExperimentProjectionObserver
 import com.denis.habitlab.shared.domain.repository.AppMetadataRepository
 import com.denis.habitlab.shared.presentation.AppPresenter
+import com.denis.habitlab.shared.presentation.navigation.ConfirmationDialogEntryViewModel
+import com.denis.habitlab.shared.presentation.navigation.ExperimentEntryViewModel
+import com.denis.habitlab.shared.presentation.navigation.FlowEntryViewModel
+import com.denis.habitlab.shared.presentation.navigation.GalleryEntryViewModel
 import org.koin.core.KoinApplication
 import org.koin.core.context.startKoin
 import org.koin.dsl.module
@@ -34,5 +40,15 @@ private fun habitLabModule(platformDescriptor: PlatformDescriptor) = module {
         )
     }
     single { GetAppMetadata(repository = get()) }
+    single<ExperimentProjectionObserver> { InMemoryExperimentProjectionObserver() }
     factory { AppPresenter(getAppMetadata = get()) }
+    factory { GalleryEntryViewModel() }
+    factory { parameters ->
+        ExperimentEntryViewModel(
+            experimentId = parameters.get(),
+            projectionObserver = get(),
+        )
+    }
+    factory { parameters -> FlowEntryViewModel(flowId = parameters.get()) }
+    factory { parameters -> ConfirmationDialogEntryViewModel(experimentId = parameters.get()) }
 }

@@ -23,7 +23,7 @@ class ArchitectureBoundaryChecker {
         val isDiPackage = packageName == "$sharedRootPackage.di" ||
             packageName.startsWith("$sharedRootPackage.di.")
 
-        if (!isDiPackage && koinReference.containsMatchIn(code)) {
+        if (!isDiPackage && !isKoinCompositionRoot(source, packageName) && koinReference.containsMatchIn(code)) {
             violations += "${source.relativePath}: org.koin references are only allowed in di"
         }
 
@@ -63,7 +63,11 @@ class ArchitectureBoundaryChecker {
         if (layer == "domain" && coreOrDomainInfrastructure.containsMatchIn(code)) {
             violations += "${source.relativePath}: domain must remain pure common Kotlin"
         }
-        if (layer == "presentation" && presentationInfrastructure.containsMatchIn(code)) {
+        if (
+            layer == "presentation" &&
+            !isLifecyclePresentationEntry(source, packageName) &&
+            presentationInfrastructure.containsMatchIn(code)
+        ) {
             violations += "${source.relativePath}: presentation must not use native or infrastructure APIs"
         }
         if (layer == "presentation" && dataSourceOrDaoReference.containsMatchIn(code)) {
@@ -290,6 +294,19 @@ class ArchitectureBoundaryChecker {
         return false
     }
 
+    /** App-owned navigation entries are the only non-DI common composition boundary allowed Koin. */
+    private fun isKoinCompositionRoot(source: ArchitectureSource, packageName: String): Boolean =
+        packageName == "$sharedRootPackage.app" &&
+            source.relativePath == navigationEntryKoinCompositionPath
+
+    /**
+     * Common AndroidX ViewModels are a deliberate presentation boundary for Nav3 entries. Keep the
+     * exception file-scoped so screens cannot acquire arbitrary lifecycle/platform dependencies.
+     */
+    private fun isLifecyclePresentationEntry(source: ArchitectureSource, packageName: String): Boolean =
+        packageName == "$sharedRootPackage.presentation.navigation" &&
+            source.relativePath == navigationEntryViewModelsPath
+
     private companion object {
         const val sharedRootPackage = "com.denis.habitlab.shared"
         val layers = listOf("app", "core", "data", "di", "domain", "presentation")
@@ -313,5 +330,9 @@ class ArchitectureBoundaryChecker {
             "\\b(?:Dao|DataSource|[A-Z][A-Za-z0-9_]*(?i:Dao|DataSource))\\b",
         )
         val koinReference = Regex("(?<![A-Za-z0-9_.])org\\.koin\\.")
+        const val navigationEntryKoinCompositionPath =
+            "src/commonMain/kotlin/com/denis/habitlab/shared/app/NavigationEntryKoinComposition.kt"
+        const val navigationEntryViewModelsPath =
+            "src/commonMain/kotlin/com/denis/habitlab/shared/presentation/navigation/NavigationEntryViewModels.kt"
     }
 }

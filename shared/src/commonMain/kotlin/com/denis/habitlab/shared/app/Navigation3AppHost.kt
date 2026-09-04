@@ -6,28 +6,43 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.NavBackStack
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
+import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.scene.DialogSceneStrategy
 import androidx.navigation3.scene.SinglePaneSceneStrategy
 import androidx.navigation3.ui.NavDisplay
 import androidx.savedstate.serialization.SavedStateConfiguration
 import com.denis.habitlab.shared.presentation.gallery.ComponentGalleryScreen
+import com.denis.habitlab.shared.presentation.navigation.ConfirmationDialogEntryViewModel
+import com.denis.habitlab.shared.presentation.navigation.ConfirmationDialogUiSideEffect
+import com.denis.habitlab.shared.presentation.navigation.ExperimentDialogResult as NavigationDialogResult
+import com.denis.habitlab.shared.presentation.navigation.ExperimentEntryViewModel
+import com.denis.habitlab.shared.presentation.navigation.ExperimentUiSideEffect
+import com.denis.habitlab.shared.presentation.navigation.FlowEntryViewModel
+import com.denis.habitlab.shared.presentation.navigation.FlowUiSideEffect
+import com.denis.habitlab.shared.presentation.navigation.GalleryEntryViewModel
+import com.denis.habitlab.shared.presentation.navigation.GalleryUiSideEffect
 import com.denis.habitlab.shared.presentation.navigation.NavigationDialogResultDisplay
 import com.denis.habitlab.shared.presentation.navigation.NavigationExperimentDialogContent
 import com.denis.habitlab.shared.presentation.navigation.NavigationExperimentScreen
 import com.denis.habitlab.shared.presentation.navigation.NavigationFlowStepOneScreen
 import com.denis.habitlab.shared.presentation.navigation.NavigationFlowStepTwoScreen
+import kotlinx.coroutines.flow.collect
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.polymorphic
 import kotlinx.serialization.modules.subclass
+import org.orbitmvi.orbit.compose.collectAsState
+import org.orbitmvi.orbit.compose.collectSideEffect
 
 /**
- * A thin, common Navigation 3 shell. It owns the one user-managed back stack used by Android and
- * iOS; feature composables only receive callbacks and never retain routes or platform objects.
+ * Common, app-owned Navigation 3 shell. It is the only component that mutates the shared stack;
+ * entry ViewModels express navigation exclusively as Orbit one-shot side effects.
  */
 @Composable
 internal fun Navigation3AppHost(
@@ -35,13 +50,24 @@ internal fun Navigation3AppHost(
     navigationEvents: AppNavigationEventBridge,
 ) {
     val settingsCapability = rememberAppSettingsCapability()
-    val backStack = rememberNavBackStack(navigationSavedStateConfiguration, AppDestination.Gallery)
-    var lastDialogResult by remember { mutableStateOf<ExperimentDialogResult?>(null) }
+    val snapshotStore = rememberNavigationRouteSnapshotStore()
+    val restoredRoutes = remember(snapshotStore) {
+        NavigationRouteSnapshotCodec.restore(snapshotStore)
+    }
+    val backStack = rememberNavBackStack(
+        navigationSavedStateConfiguration,
+        *restoredRoutes.toTypedArray(),
+    )
+    var pendingDialogDelivery by remember { mutableStateOf<DialogResultDelivery?>(null) }
+    var visibleDialogResult by remember { mutableStateOf<NavigationDialogResult?>(null) }
     val navigator = remember(backStack) {
         AppNavigator(
             backStack = backStack,
-            onDialogResult = { result -> lastDialogResult = result },
-            onExperimentOpened = { lastDialogResult = null },
+            onDialogResult = { delivery -> pendingDialogDelivery = delivery },
+            onNavigationStarted = {
+                pendingDialogDelivery = null
+                visibleDialogResult = null
+            },
         )
     }
     val navigationEvent = navigationEvents.latestEvent
@@ -50,66 +76,132 @@ internal fun Navigation3AppHost(
     LaunchedEffect(navigationEvent?.id) {
         navigationEvent?.let(navigator::handleExternalNavigation)
     }
-
     LaunchedEffect(backRequestId) {
         if (backRequestId > 0L) navigator.onBack()
     }
+    LaunchedEffect(backStack, snapshotStore) {
+        snapshotFlow { backStack.toList().filterIsInstance<AppDestination>() }
+            .collect { routes -> NavigationRouteSnapshotCodec.persist(snapshotStore, routes) }
+    }
 
-    val entries = remember(navigator, appTitle, lastDialogResult, settingsCapability) {
+    val entryDecorators = listOf(
+        rememberSaveableStateHolderNavEntryDecorator<NavKey>(),
+        rememberViewModelStoreNavEntryDecorator<NavKey>(),
+    )
+    val entries = remember(
+        appTitle,
+        navigator,
+        settingsCapability,
+        pendingDialogDelivery,
+        visibleDialogResult,
+    ) {
         entryProvider<NavKey> {
             entry<AppDestination.Gallery> {
-                ComponentGalleryScreen(
-                    appTitle = appTitle,
-                    onBack = rememberDropUnlessResumedNavigationAction(navigator::onBack),
-                    onOpenExperiment = rememberDropUnlessResumedNavigationAction(navigator::openExperiment),
-                    onStartFlow = rememberDropUnlessResumedNavigationAction(navigator::startGalleryFlow),
-                )
+                val viewModel: GalleryEntryViewModel = navigationEntryViewModel(key = "gallery")
+                val state by viewModel.collectAsState()
+                viewModel.collectSideEffect(sideEffect = navigator::handleGalleryEffect)
+
+                if (state.isReady) {
+                    ComponentGalleryScreen(
+                        appTitle = appTitle,
+                        onBack = rememberDropUnlessResumedNavigationAction(viewModel::back),
+                        onOpenExperiment = rememberDropUnlessResumedNavigationAction(
+                            viewModel::openExperiment,
+                        ),
+                        onStartFlow = rememberDropUnlessResumedNavigationAction(viewModel::startFlow),
+                    )
+                }
             }
             entry<AppDestination.Experiment> { route ->
+                val viewModel: ExperimentEntryViewModel = navigationEntryViewModel(
+                    key = "experiment:${route.experimentId.value}",
+                    route.experimentId,
+                )
+                val state by viewModel.collectAsState()
+                val delivery = pendingDialogDelivery?.takeIf { candidate ->
+                    candidate.experimentId == route.experimentId && backStack.lastOrNull() == route
+                }
+                LaunchedEffect(delivery?.id) {
+                    delivery?.let { resultDelivery ->
+                        viewModel.deliverDialogResult(resultDelivery.result)
+                        if (pendingDialogDelivery?.id == resultDelivery.id) {
+                            pendingDialogDelivery = null
+                        }
+                    }
+                }
+                viewModel.collectSideEffect { effect ->
+                    when (effect) {
+                        is ExperimentUiSideEffect.DialogResultDelivered -> {
+                            if (navigator.acceptDialogResult(route, effect.result)) {
+                                visibleDialogResult = effect.result
+                            }
+                        }
+
+                        else -> navigator.handleExperimentEffect(route, effect)
+                    }
+                }
+
                 NavigationExperimentScreen(
-                    experimentId = route.experimentId.value,
-                    dialogResult = lastDialogResult.displayFor(route.experimentId),
-                    onBack = rememberDropUnlessResumedNavigationAction(navigator::onBack),
-                    onOpenDialog = rememberDropUnlessResumedNavigationAction {
-                        navigator.openConfirmation(route.experimentId)
-                    },
-                    onStartFlow = rememberDropUnlessResumedNavigationAction {
-                        navigator.startExperimentFlow(route.experimentId)
-                    },
+                    experimentId = state.projection?.id?.value ?: route.experimentId.value,
+                    dialogResult = visibleDialogResult.displayFor(route.experimentId),
+                    onBack = rememberDropUnlessResumedNavigationAction(viewModel::back),
+                    onOpenDialog = rememberDropUnlessResumedNavigationAction(
+                        viewModel::openConfirmation,
+                    ),
+                    onStartFlow = rememberDropUnlessResumedNavigationAction(viewModel::startFlow),
                     onOpenApplicationSettings = rememberDropUnlessResumedNavigationAction(
                         settingsCapability::openApplicationSettings,
                     ),
                 )
             }
             entry<AppDestination.FlowStepOne> { route ->
+                val viewModel: FlowEntryViewModel = navigationEntryViewModel(
+                    key = "flow-step-one:${route.flowId.value}",
+                    route.flowId,
+                )
+                val state by viewModel.collectAsState()
+                viewModel.collectSideEffect { effect ->
+                    navigator.handleFlowEffect(route, effect)
+                }
+
                 NavigationFlowStepOneScreen(
-                    flowId = route.flowId.value,
-                    onBack = rememberDropUnlessResumedNavigationAction(navigator::onBack),
-                    onNext = rememberDropUnlessResumedNavigationAction {
-                        navigator.advanceFlow(route.flowId)
-                    },
+                    flowId = state.flowId.value,
+                    onBack = rememberDropUnlessResumedNavigationAction(viewModel::back),
+                    onNext = rememberDropUnlessResumedNavigationAction(viewModel::advance),
                 )
             }
             entry<AppDestination.FlowStepTwo> { route ->
+                val viewModel: FlowEntryViewModel = navigationEntryViewModel(
+                    key = "flow-step-two:${route.flowId.value}",
+                    route.flowId,
+                )
+                val state by viewModel.collectAsState()
+                viewModel.collectSideEffect { effect ->
+                    navigator.handleFlowEffect(route, effect)
+                }
+
                 NavigationFlowStepTwoScreen(
-                    flowId = route.flowId.value,
-                    onBack = rememberDropUnlessResumedNavigationAction(navigator::onBack),
-                    onFinish = rememberDropUnlessResumedNavigationAction {
-                        navigator.completeFlow(route.flowId)
-                    },
+                    flowId = state.flowId.value,
+                    onBack = rememberDropUnlessResumedNavigationAction(viewModel::back),
+                    onFinish = rememberDropUnlessResumedNavigationAction(viewModel::complete),
                 )
             }
             entry<AppDestination.ConfirmExperiment>(
                 metadata = { DialogSceneStrategy.dialog() },
             ) { route ->
+                val viewModel: ConfirmationDialogEntryViewModel = navigationEntryViewModel(
+                    key = "confirm-experiment:${route.experimentId.value}",
+                    route.experimentId,
+                )
+                val state by viewModel.collectAsState()
+                viewModel.collectSideEffect { effect ->
+                    navigator.handleConfirmationEffect(route, effect)
+                }
+
                 NavigationExperimentDialogContent(
-                    experimentId = route.experimentId.value,
-                    onConfirm = rememberDropUnlessResumedNavigationAction {
-                        navigator.resolveConfirmation(route.experimentId, confirmed = true)
-                    },
-                    onCancel = rememberDropUnlessResumedNavigationAction {
-                        navigator.resolveConfirmation(route.experimentId, confirmed = false)
-                    },
+                    experimentId = state.experimentId.value,
+                    onConfirm = rememberDropUnlessResumedNavigationAction(viewModel::confirm),
+                    onCancel = rememberDropUnlessResumedNavigationAction(viewModel::cancel),
                 )
             }
         }
@@ -118,15 +210,13 @@ internal fun Navigation3AppHost(
     NavDisplay(
         backStack = backStack,
         onBack = navigator::onBack,
+        entryDecorators = entryDecorators,
         sceneStrategies = listOf(DialogSceneStrategy(), SinglePaneSceneStrategy()),
         entryProvider = entries,
     )
 }
 
-/**
- * The only values that can enter the Nav3 back stack. They contain stable, serializable IDs only;
- * no screen models, UI state, or platform values are stored with a route.
- */
+/** The complete set of serializable Nav3 keys. Routes contain only typed IDs, never UiState. */
 @Serializable
 sealed interface AppDestination : NavKey {
     @Serializable
@@ -145,29 +235,13 @@ sealed interface AppDestination : NavKey {
     data class ConfirmExperiment(val experimentId: ExperimentId) : AppDestination
 }
 
-@Serializable
-data class ExperimentId(
-    val value: String,
-) {
-    companion object {
-        private val knownValues = setOf("daily-movement", "sleep-routine")
+/** Source-compatible factory for the typed navigation result now owned by presentation. */
+object ExperimentDialogResult {
+    fun Confirmed(experimentId: ExperimentId): NavigationDialogResult =
+        NavigationDialogResult.Confirmed(experimentId)
 
-        fun fromExternalValue(value: String): ExperimentId? =
-            value.takeIf { it in knownValues }?.let(::ExperimentId)
-
-    }
-}
-
-@Serializable
-data class FlowId(val value: String)
-
-/** Explicit result data delivered only after the dialog entry has been popped. */
-sealed interface ExperimentDialogResult {
-    val experimentId: ExperimentId
-
-    data class Confirmed(override val experimentId: ExperimentId) : ExperimentDialogResult
-
-    data class Cancelled(override val experimentId: ExperimentId) : ExperimentDialogResult
+    fun Cancelled(experimentId: ExperimentId): NavigationDialogResult =
+        NavigationDialogResult.Cancelled(experimentId)
 }
 
 /** Common, host-safe signal for initial and repeated platform deep-link delivery. */
@@ -199,7 +273,7 @@ data class ExternalNavigationEvent(
     val rawUrl: String?,
 )
 
-/** Strict allowlist for external URLs. Every nonmatching form is deliberately a safe root route. */
+/** Strict allowlist for external URLs. Every nonmatching form deliberately returns to root. */
 object HabitLabDeepLink {
     private const val experimentPrefix = "habitlab://experiment/"
 
@@ -207,77 +281,199 @@ object HabitLabDeepLink {
         val encodedId = rawUrl
             ?.takeIf { it.startsWith(experimentPrefix) }
             ?.removePrefix(experimentPrefix)
-            ?.takeIf { it.isNotEmpty() && it.none { character -> character == '/' || character == '?' || character == '#' } }
+            ?.takeIf { value ->
+                value.isNotEmpty() && value.none { character ->
+                    character == '/' || character == '?' || character == '#'
+                }
+            }
             ?: return null
 
         return ExperimentId.fromExternalValue(encodedId)?.let(AppDestination::Experiment)
     }
 }
 
+/** Result identity is scoped to the immediate caller after a dialog is popped, never a route field. */
+private data class DialogResultDelivery(
+    val id: Long,
+    val experimentId: ExperimentId,
+    val result: NavigationDialogResult,
+)
+
 private class AppNavigator(
     private val backStack: NavBackStack<NavKey>,
-    private val onDialogResult: (ExperimentDialogResult) -> Unit,
-    private val onExperimentOpened: () -> Unit,
+    private val onDialogResult: (DialogResultDelivery) -> Unit,
+    private val onNavigationStarted: () -> Unit,
 ) {
-    fun openExperiment(externalId: String) {
-        ExperimentId.fromExternalValue(externalId)?.let { experimentId ->
-            onExperimentOpened()
-            backStack += AppDestination.Experiment(experimentId)
+    private var nextDialogResultId = 0L
+
+    fun handleGalleryEffect(effect: GalleryUiSideEffect) {
+        if (backStack.lastOrNull() != AppDestination.Gallery) {
+            popToRoot()
+            return
+        }
+        when (effect) {
+            is GalleryUiSideEffect.OpenExperiment -> openExperiment(effect.experimentId)
+            GalleryUiSideEffect.StartFlow -> startGalleryFlow()
+            GalleryUiSideEffect.Back -> onBack()
         }
     }
 
-    fun startGalleryFlow() {
-        backStack += AppDestination.FlowStepOne(FlowId("gallery-setup"))
-    }
-
-    fun startExperimentFlow(experimentId: ExperimentId) {
-        backStack += AppDestination.FlowStepOne(FlowId("experiment-${experimentId.value}"))
-    }
-
-    fun advanceFlow(flowId: FlowId) {
-        backStack += AppDestination.FlowStepTwo(flowId)
-    }
-
-    fun completeFlow(flowId: FlowId) {
-        if (backStack.lastOrNull() == AppDestination.FlowStepTwo(flowId)) {
-            backStack.removeLast()
+    fun handleExperimentEffect(origin: AppDestination.Experiment, effect: ExperimentUiSideEffect) {
+        if (backStack.lastOrNull() != origin) {
+            popToRoot()
+            return
         }
-        if (backStack.lastOrNull() == AppDestination.FlowStepOne(flowId)) {
-            backStack.removeLast()
+        when (effect) {
+            ExperimentUiSideEffect.Back -> onBack()
+            is ExperimentUiSideEffect.OpenConfirmation -> openConfirmation(effect.experimentId)
+            is ExperimentUiSideEffect.StartFlow -> startExperimentFlow(effect.experimentId)
+            ExperimentUiSideEffect.PopToRoot -> popToRoot()
+            is ExperimentUiSideEffect.DialogResultDelivered -> Unit
         }
     }
 
-    fun openConfirmation(experimentId: ExperimentId) {
-        backStack += AppDestination.ConfirmExperiment(experimentId)
+    fun handleFlowEffect(origin: AppDestination, effect: FlowUiSideEffect) {
+        if (backStack.lastOrNull() != origin) {
+            popToRoot()
+            return
+        }
+        when (effect) {
+            FlowUiSideEffect.Back -> onBack()
+            is FlowUiSideEffect.Advance -> advanceFlow(effect.flowId)
+            is FlowUiSideEffect.Complete -> completeFlow(effect.flowId)
+            FlowUiSideEffect.PopToRoot -> popToRoot()
+        }
     }
 
-    fun resolveConfirmation(experimentId: ExperimentId, confirmed: Boolean) {
-        if (backStack.lastOrNull() != AppDestination.ConfirmExperiment(experimentId)) return
+    fun handleConfirmationEffect(
+        origin: AppDestination.ConfirmExperiment,
+        effect: ConfirmationDialogUiSideEffect,
+    ) {
+        if (backStack.lastOrNull() != origin) {
+            popToRoot()
+            return
+        }
+        when (effect) {
+            is ConfirmationDialogUiSideEffect.Resolve -> resolveConfirmation(effect.result)
+        }
+    }
 
-        backStack.removeLast()
-        onDialogResult(
-            if (confirmed) {
-                ExperimentDialogResult.Confirmed(experimentId)
-            } else {
-                ExperimentDialogResult.Cancelled(experimentId)
-            },
-        )
+    fun acceptDialogResult(
+        origin: AppDestination.Experiment,
+        result: NavigationDialogResult,
+    ): Boolean {
+        if (backStack.lastOrNull() == origin && result.experimentId == origin.experimentId) {
+            return true
+        }
+        popToRoot()
+        return false
     }
 
     fun onBack() {
-        val top = backStack.lastOrNull()
-        if (top is AppDestination.ConfirmExperiment) {
-            resolveConfirmation(top.experimentId, confirmed = false)
-        } else if (backStack.size > 1) {
-            backStack.removeLast()
+        when (val top = backStack.lastOrNull()) {
+            is AppDestination.ConfirmExperiment -> {
+                resolveConfirmation(NavigationDialogResult.Cancelled(top.experimentId))
+            }
+
+            null, AppDestination.Gallery -> Unit
+            else -> {
+                onNavigationStarted()
+                backStack.removeLast()
+            }
         }
     }
 
     fun handleExternalNavigation(event: ExternalNavigationEvent) {
-        onExperimentOpened()
+        onNavigationStarted()
+        replaceWithRoot()
+        HabitLabDeepLink.parse(event.rawUrl)?.let(backStack::add)
+    }
+
+    private fun openExperiment(experimentId: ExperimentId) {
+        if (ExperimentId.fromExternalValue(experimentId.value) == null) {
+            popToRoot()
+            return
+        }
+        onNavigationStarted()
+        backStack += AppDestination.Experiment(experimentId)
+    }
+
+    private fun startGalleryFlow() {
+        if (backStack.lastOrNull() != AppDestination.Gallery) {
+            popToRoot()
+            return
+        }
+        onNavigationStarted()
+        backStack += AppDestination.FlowStepOne(FlowId.gallerySetup())
+    }
+
+    private fun startExperimentFlow(experimentId: ExperimentId) {
+        if (backStack.lastOrNull() != AppDestination.Experiment(experimentId)) {
+            popToRoot()
+            return
+        }
+        onNavigationStarted()
+        backStack += AppDestination.FlowStepOne(FlowId.forExperiment(experimentId))
+    }
+
+    private fun advanceFlow(flowId: FlowId) {
+        if (!FlowId.isSupported(flowId) || backStack.lastOrNull() != AppDestination.FlowStepOne(flowId)) {
+            popToRoot()
+            return
+        }
+        onNavigationStarted()
+        backStack += AppDestination.FlowStepTwo(flowId)
+    }
+
+    private fun completeFlow(flowId: FlowId) {
+        if (backStack.lastOrNull() != AppDestination.FlowStepTwo(flowId)) {
+            popToRoot()
+            return
+        }
+        onNavigationStarted()
+        backStack.removeLast()
+        if (backStack.lastOrNull() == AppDestination.FlowStepOne(flowId)) {
+            backStack.removeLast()
+        } else {
+            popToRoot()
+        }
+    }
+
+    private fun openConfirmation(experimentId: ExperimentId) {
+        if (backStack.lastOrNull() != AppDestination.Experiment(experimentId)) {
+            popToRoot()
+            return
+        }
+        onNavigationStarted()
+        backStack += AppDestination.ConfirmExperiment(experimentId)
+    }
+
+    private fun resolveConfirmation(result: NavigationDialogResult) {
+        val dialog = backStack.lastOrNull() as? AppDestination.ConfirmExperiment
+        val caller = backStack.getOrNull(backStack.lastIndex - 1) as? AppDestination.Experiment
+        if (dialog?.experimentId != result.experimentId || caller?.experimentId != result.experimentId) {
+            popToRoot()
+            return
+        }
+        backStack.removeLast()
+        nextDialogResultId += 1
+        onDialogResult(
+            DialogResultDelivery(
+                id = nextDialogResultId,
+                experimentId = caller.experimentId,
+                result = result,
+            ),
+        )
+    }
+
+    private fun popToRoot() {
+        onNavigationStarted()
+        replaceWithRoot()
+    }
+
+    private fun replaceWithRoot() {
         backStack.clear()
         backStack += AppDestination.Gallery
-        HabitLabDeepLink.parse(event.rawUrl)?.let(backStack::add)
     }
 }
 
@@ -296,11 +492,11 @@ private val navigationSavedStateConfiguration = SavedStateConfiguration {
     }
 }
 
-private fun ExperimentDialogResult.toDisplay(): NavigationDialogResultDisplay = when (this) {
-    is ExperimentDialogResult.Confirmed -> NavigationDialogResultDisplay.Confirmed
-    is ExperimentDialogResult.Cancelled -> NavigationDialogResultDisplay.Cancelled
+private fun NavigationDialogResult.toDisplay(): NavigationDialogResultDisplay = when (this) {
+    is NavigationDialogResult.Confirmed -> NavigationDialogResultDisplay.Confirmed
+    is NavigationDialogResult.Cancelled -> NavigationDialogResultDisplay.Cancelled
 }
 
-internal fun ExperimentDialogResult?.displayFor(
+internal fun NavigationDialogResult?.displayFor(
     experimentId: ExperimentId,
 ): NavigationDialogResultDisplay? = takeIf { it?.experimentId == experimentId }?.toDisplay()
