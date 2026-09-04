@@ -26,6 +26,7 @@ class HabitLabApplication : Application() {
         ) {
             androidContext(this@HabitLabApplication)
         }
+        runtime.initialize()
         appPresenter = runtime.presenter
         debugDatabaseControl = runtime.debugDatabaseControl
     }

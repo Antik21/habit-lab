@@ -1,5 +1,7 @@
 package com.denis.habitlab.shared.data.observer
 
+import com.denis.habitlab.shared.data.local.DatabaseReadiness
+import com.denis.habitlab.shared.data.local.DatabaseReadinessState
 import com.denis.habitlab.shared.data.local.RoomExperimentLocalDataSource
 import com.denis.habitlab.shared.data.mapper.toDomain
 import com.denis.habitlab.shared.domain.model.ExperimentId
@@ -13,60 +15,119 @@ import com.denis.habitlab.shared.domain.observer.ExperimentProjectionObservation
 import com.denis.habitlab.shared.domain.observer.ExperimentProjectionObserver
 import com.denis.habitlab.shared.domain.repository.StorageFailure
 import com.denis.habitlab.shared.domain.repository.StorageOperation
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.datetime.LocalDate
 
 /** Maps Room flows to domain observations and turns corrupt/closed DB failures into typed states. */
 internal class RoomExperimentObservers(
     private val localDataSource: RoomExperimentLocalDataSource,
+    private val databaseReadiness: DatabaseReadiness = DatabaseReadiness(DatabaseReadinessState.Ready),
 ) : ExperimentProjectionObserver, ExperimentListObserver, DailyCheckInObserver {
     override fun observe(experimentId: ExperimentId): Flow<ExperimentProjectionObservation> =
-        localDataSource.observeExperiment(experimentId.value)
-            .map { entity ->
-                entity?.toDomain()?.let { draft ->
-                    ExperimentProjectionObservation.Available(
-                        ExperimentProjection(
-                            id = draft.id,
-                            displayName = draft.name.value,
-                            status = draft.status,
-                        ),
+        afterDatabaseReady { readiness ->
+            when (readiness) {
+                DatabaseReadinessState.Ready -> {
+                    emitAll(
+                        localDataSource.observeExperiment(experimentId.value)
+                            .map { entity ->
+                                entity?.toDomain()?.let { experiment ->
+                                    ExperimentProjectionObservation.Available(
+                                        ExperimentProjection(
+                                            id = experiment.id,
+                                            displayName = experiment.name.value,
+                                            status = experiment.status,
+                                        ),
+                                    )
+                                } ?: ExperimentProjectionObservation.Missing
+                            }
+                            .mapRecoverableStorageFailure(StorageOperation.OBSERVE_EXPERIMENT) { failure ->
+                                ExperimentProjectionObservation.Failed(failure)
+                            },
                     )
-                } ?: ExperimentProjectionObservation.Missing
+                }
+
+                is DatabaseReadinessState.Failed -> {
+                    emit(ExperimentProjectionObservation.Failed(readiness.failure))
+                }
+
+                DatabaseReadinessState.Initializing -> error("Database readiness must be terminal")
             }
-            .catch {
-                emit(ExperimentProjectionObservation.Failed(StorageFailure(StorageOperation.OBSERVE_EXPERIMENT)))
-            }
+        }
 
     override fun observeAll(): Flow<ExperimentListObservation> =
-        localDataSource.observeExperiments()
-            .map<List<com.denis.habitlab.shared.data.local.ExperimentEntity>, ExperimentListObservation> { entities ->
-                ExperimentListObservation.Available(
-                    entities.map { entity ->
-                        entity.toDomain().let { draft ->
-                            ExperimentSummary(
-                                id = draft.id,
-                                name = draft.name,
-                                status = draft.status,
-                            )
-                        }
-                    },
-                )
+        afterDatabaseReady { readiness ->
+            when (readiness) {
+                DatabaseReadinessState.Ready -> {
+                    emitAll(
+                        localDataSource.observeExperiments()
+                            .map<List<com.denis.habitlab.shared.data.local.ExperimentEntity>, ExperimentListObservation> { entities ->
+                                ExperimentListObservation.Available(
+                                    entities.map { entity ->
+                                        entity.toDomain().let { experiment ->
+                                            ExperimentSummary(
+                                                id = experiment.id,
+                                                name = experiment.name,
+                                                status = experiment.status,
+                                            )
+                                        }
+                                    },
+                                )
+                            }
+                            .mapRecoverableStorageFailure(StorageOperation.OBSERVE_EXPERIMENTS) { failure ->
+                                ExperimentListObservation.Failed(failure)
+                            },
+                    )
+                }
+
+                is DatabaseReadinessState.Failed -> emit(ExperimentListObservation.Failed(readiness.failure))
+                DatabaseReadinessState.Initializing -> error("Database readiness must be terminal")
             }
-            .catch {
-                emit(ExperimentListObservation.Failed(StorageFailure(StorageOperation.OBSERVE_EXPERIMENTS)))
-            }
+        }
 
     override fun observe(
         experimentId: ExperimentId,
         localDate: LocalDate,
-    ): Flow<DailyCheckInObservation> = localDataSource.observeDailyCheckIn(experimentId.value, localDate.toString())
-        .map { entity ->
-            entity?.toDomain()?.let(DailyCheckInObservation::Available)
-                ?: DailyCheckInObservation.Missing
+    ): Flow<DailyCheckInObservation> = afterDatabaseReady { readiness ->
+        when (readiness) {
+            DatabaseReadinessState.Ready -> {
+                emitAll(
+                    localDataSource.observeDailyCheckIn(experimentId.value, localDate.toString())
+                        .map { entity ->
+                            entity?.toDomain()?.let(DailyCheckInObservation::Available)
+                                ?: DailyCheckInObservation.Missing
+                        }
+                        .mapRecoverableStorageFailure(StorageOperation.OBSERVE_DAILY_CHECK_IN) { failure ->
+                            DailyCheckInObservation.Failed(failure)
+                        },
+                )
+            }
+
+            is DatabaseReadinessState.Failed -> emit(DailyCheckInObservation.Failed(readiness.failure))
+            DatabaseReadinessState.Initializing -> error("Database readiness must be terminal")
         }
-        .catch {
-            emit(DailyCheckInObservation.Failed(StorageFailure(StorageOperation.OBSERVE_DAILY_CHECK_IN)))
-        }
+    }
+
+    private fun <T> afterDatabaseReady(
+        observeAfterReady: suspend kotlinx.coroutines.flow.FlowCollector<T>.(DatabaseReadinessState) -> Unit,
+    ): Flow<T> = flow {
+        observeAfterReady(databaseReadiness.awaitTerminalState())
+    }
+}
+
+/** Converts only recoverable storage failures; coroutine cancellation and fatal errors stay visible. */
+private fun <T> Flow<T>.mapRecoverableStorageFailure(
+    operation: StorageOperation,
+    failure: (StorageFailure) -> T,
+): Flow<T> = catch { throwable ->
+    when (throwable) {
+        is CancellationException -> throw throwable
+        is Error -> throw throwable
+        is Exception -> emit(failure(StorageFailure(operation)))
+        else -> throw throwable
+    }
 }

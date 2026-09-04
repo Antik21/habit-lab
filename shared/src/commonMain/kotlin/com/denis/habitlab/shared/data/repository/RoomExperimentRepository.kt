@@ -60,7 +60,7 @@ private suspend fun <T> storageWrite(
     Result.success(block())
 } catch (cancellation: CancellationException) {
     throw cancellation
-} catch (_: Throwable) {
+} catch (_: Exception) {
     Result.failure(StorageFailure(operation))
 }
 

@@ -19,6 +19,10 @@ import com.denis.habitlab.shared.domain.observer.ExperimentProjectionObservation
 import com.denis.habitlab.shared.domain.repository.CreateDraftResult
 import com.denis.habitlab.shared.domain.repository.EditDraftResult
 import com.denis.habitlab.shared.domain.repository.RecordDailyCheckInResult
+import com.denis.habitlab.shared.domain.repository.StorageFailure
+import com.denis.habitlab.shared.domain.repository.StorageOperation
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.LocalDate
@@ -38,7 +42,10 @@ class RoomExperimentStoreTest {
         try {
             val source = RoomExperimentLocalDataSource(database)
             val repository = RoomExperimentRepository(source)
-            val observers = RoomExperimentObservers(source)
+            val observers = RoomExperimentObservers(
+                localDataSource = source,
+                databaseReadiness = DatabaseReadiness(DatabaseReadinessState.Ready),
+            )
             val draft = draft(id = "draft-a123456", name = "Morning walk")
             val checkInDate = LocalDate.parse("2026-01-03")
 
@@ -138,7 +145,10 @@ class RoomExperimentStoreTest {
         val database = inMemoryDatabase()
         try {
             val source = RoomExperimentLocalDataSource(database)
-            val observers = RoomExperimentObservers(source)
+            val observers = RoomExperimentObservers(
+                localDataSource = source,
+                databaseReadiness = DatabaseReadiness(DatabaseReadinessState.Ready),
+            )
             val control = DebugExperimentDatabaseControl(source)
 
             assertTrue(source.seedIfEmpty())
@@ -159,6 +169,53 @@ class RoomExperimentStoreTest {
             assertEquals(
                 DailyCheckInObservation.Available(DebugSeed.fixed.checkIns.first().toDomain()),
                 observers.observe(ExperimentId("daily-movement"), LocalDate.parse("2026-01-02")).first(),
+            )
+        } finally {
+            database.close()
+        }
+    }
+
+    @Test
+    fun debugBootstrapWaitsBeforeObserversCanPublishAnEmptyStore() = runBlocking {
+        val database = inMemoryDatabase()
+        try {
+            val source = RoomExperimentLocalDataSource(database)
+            val readiness = DatabaseReadiness(DatabaseReadinessState.Initializing)
+            val observers = RoomExperimentObservers(source, readiness)
+            val observation = async(start = CoroutineStart.UNDISPATCHED) {
+                observers.observeAll().first()
+            }
+
+            assertFalse(observation.isCompleted)
+            DebugDatabaseBootstrap(DebugExperimentDatabaseControl(source), readiness).initialize()
+
+            assertEquals(
+                listOf("daily-movement", "sleep-routine"),
+                assertIs<ExperimentListObservation.Available>(observation.await())
+                    .experiments
+                    .map { it.id.value },
+            )
+        } finally {
+            database.close()
+        }
+    }
+
+    @Test
+    fun debugReadinessFailureIsObservedAsTypedStorageFailure() = runBlocking {
+        val database = inMemoryDatabase()
+        try {
+            val failure = StorageFailure(StorageOperation.DEBUG_SEED)
+            val readiness = DatabaseReadiness(DatabaseReadinessState.Initializing)
+            val observers = RoomExperimentObservers(
+                localDataSource = RoomExperimentLocalDataSource(database),
+                databaseReadiness = readiness,
+            )
+
+            readiness.markFailed(failure)
+
+            assertEquals(
+                ExperimentListObservation.Failed(failure),
+                observers.observeAll().first(),
             )
         } finally {
             database.close()

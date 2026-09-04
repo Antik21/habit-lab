@@ -37,13 +37,17 @@ Only the debug host boundary sets `isDebugBuild` (`BuildConfig.DEBUG` on Android
 iOS). It receives a `HabitLabRuntime.debugDatabaseControl`; release runtimes return `null` and do
 not register the controller or execute seed/reset work.
 
-During debug graph creation, `seedIfEmpty()` completes before an experiment entry observer can
-emit. It creates the deterministic active `daily-movement` / `Daily movement` and draft
-`sleep-routine` / `Sleep routine` records plus one fixed check-in for each. The performed daily
-movement fixture has an occurrence; the skipped sleep fixture deliberately has no occurrence
-columns. It never replaces a nonempty database, so closing and reopening the debug app preserves
-user writes. `resetAndSeed()` is the explicit QA operation: it clears dependent check-ins first,
-clears experiments, and inserts the same fixed dataset in one Room transaction.
+Host bootstrap starts `seedIfEmpty()` asynchronously in a `HabitLabRuntime`-owned coroutine scope;
+it never blocks Android `Application.onCreate` or the iOS app initializer. Until that one
+transaction completes, the shared database-readiness gate holds list/detail/check-in observers in
+their existing loading state, so an unseeded Room cannot be interpreted as empty or missing. A
+typed seed failure is delivered as an observer failure. It creates the deterministic active
+`daily-movement` / `Daily movement` and draft `sleep-routine` / `Sleep routine` records plus one
+fixed check-in for each. The performed daily movement fixture has an occurrence; the skipped sleep
+fixture deliberately has no occurrence columns. It never replaces a nonempty database, so closing
+and reopening the debug app preserves user writes. `resetAndSeed()` is the explicit QA operation:
+it clears dependent check-ins first, clears experiments, and inserts the same fixed dataset in one
+Room transaction.
 
 For Android exploratory QA, obtain the application instance and invoke its explicit
 `debugDatabaseControl?.resetAndSeed()` from a debug-only harness or debugger coroutine. On iOS,
@@ -61,9 +65,15 @@ destructive UI control.
 2. From a command caller, create a draft, edit it, and record a performed check-in with a matching
    occurrence date or a skipped check-in without an occurrence. The corresponding
    list/detail/check-in `Flow` updates from Room without a refresh.
-3. Terminate and relaunch the app, then navigate to the draft using its valid `draft-*` ID. The
-   record and check-in remain. A syntactically valid ID whose record was deleted safely returns the
-   route to Gallery after the observer reports `Missing`.
+3. There is deliberately no shipped gallery action or external deep link for generated drafts, and
+   this repository does not provide a ready-made draft-route harness. To verify restoration in an
+   integration test, create a test-only in-memory implementation of the internal
+   `NavigationRouteSnapshotStore`, then use `NavigationRouteSnapshotCodec.persist()` with
+   `listOf(AppDestination.Gallery, AppDestination.Experiment(draftId))`. Restore that payload,
+   create the experiment entry from the restored ID, restart the database/runtime fixture, and
+   repeat the restore to verify that the Room-backed projection and check-in remain. A
+   syntactically valid ID whose record was deleted safely returns the route to Gallery after the
+   observer reports `Missing`.
 4. Call the debug reset capability and repeat step 1. The two seeded records and their timestamps
    are identical on every reset. Relaunch once more without resetting to verify persistence.
 5. Build a release variant and verify it neither seeds nor exposes a reset capability. A clean

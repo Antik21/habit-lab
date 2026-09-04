@@ -16,7 +16,7 @@ class DebugExperimentDatabaseControl internal constructor(
         DebugDatabaseResetResult.Reset
     } catch (cancellation: CancellationException) {
         throw cancellation
-    } catch (_: Throwable) {
+    } catch (_: Exception) {
         DebugDatabaseResetResult.Failed(StorageFailure(StorageOperation.DEBUG_RESET_AND_SEED))
     }
 
@@ -24,7 +24,7 @@ class DebugExperimentDatabaseControl internal constructor(
         if (localDataSource.seedIfEmpty()) DebugDatabaseSeedResult.Seeded else DebugDatabaseSeedResult.ExistingData
     } catch (cancellation: CancellationException) {
         throw cancellation
-    } catch (_: Throwable) {
+    } catch (_: Exception) {
         DebugDatabaseSeedResult.Failed(StorageFailure(StorageOperation.DEBUG_SEED))
     }
 }

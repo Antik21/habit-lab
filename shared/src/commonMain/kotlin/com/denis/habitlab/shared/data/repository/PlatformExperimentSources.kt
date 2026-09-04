@@ -13,10 +13,11 @@ import kotlin.time.Clock
 /** Infrastructure owns the system clock/randomness; command interactors receive these abstractions. */
 internal class SystemRecordedAtSource(
     private val clock: Clock = Clock.System,
-    private val timeZone: TimeZone = TimeZone.currentSystemDefault(),
+    private val timeZoneProvider: () -> TimeZone = TimeZone::currentSystemDefault,
 ) : RecordedAtSource {
     override fun now(): RecordedAt {
         val instant = clock.now()
+        val timeZone = timeZoneProvider()
         return RecordedAt(
             utcInstant = instant,
             originalOffset = timeZone.offsetAt(instant),

@@ -129,6 +129,7 @@ class ExperimentEntryViewModel(
                         }
 
                         ExperimentProjectionObservation.Missing -> {
+                            reduce { ExperimentUiState(ExperimentContentState.Loading) }
                             postSideEffect(ExperimentUiSideEffect.PopToRoot)
                         }
 

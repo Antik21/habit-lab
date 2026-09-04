@@ -1,8 +1,10 @@
 package com.denis.habitlab.shared.di
 
 import com.denis.habitlab.shared.core.platform.PlatformDescriptor
+import com.denis.habitlab.shared.data.local.DatabaseReadiness
+import com.denis.habitlab.shared.data.local.DatabaseReadinessState
+import com.denis.habitlab.shared.data.local.DebugDatabaseBootstrap
 import com.denis.habitlab.shared.data.local.DebugExperimentDatabaseControl
-import com.denis.habitlab.shared.data.local.DebugDatabaseSeedResult
 import com.denis.habitlab.shared.data.local.HabitLabDatabase
 import com.denis.habitlab.shared.data.local.RoomExperimentLocalDataSource
 import com.denis.habitlab.shared.data.observer.RoomExperimentObservers
@@ -27,7 +29,12 @@ import com.denis.habitlab.shared.presentation.navigation.ConfirmationDialogEntry
 import com.denis.habitlab.shared.presentation.navigation.ExperimentEntryViewModel
 import com.denis.habitlab.shared.presentation.navigation.FlowEntryViewModel
 import com.denis.habitlab.shared.presentation.navigation.GalleryEntryViewModel
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import org.koin.core.KoinApplication
 import org.koin.core.context.startKoin
 import org.koin.dsl.module
@@ -36,7 +43,28 @@ import org.koin.dsl.module
 class HabitLabRuntime internal constructor(
     val presenter: AppPresenter,
     val debugDatabaseControl: DebugExperimentDatabaseControl?,
-)
+    private val debugDatabaseBootstrap: DebugDatabaseBootstrap?,
+) {
+    private val runtimeJob = SupervisorJob()
+    private val initializationScope = CoroutineScope(runtimeJob + Dispatchers.Default)
+    private var initializationJob: Job? = null
+
+    /**
+     * Starts debug-only database initialization without blocking the host's startup thread.
+     * Observers remain in their Loading state until the gate becomes ready or reports failure.
+     */
+    fun initialize() {
+        if (initializationJob != null) return
+        initializationJob = debugDatabaseBootstrap?.let { bootstrap ->
+            initializationScope.launch { bootstrap.initialize() }
+        }
+    }
+
+    /** Cancels the host-owned bootstrap scope when the runtime is permanently discarded. */
+    fun close() {
+        runtimeJob.cancel()
+    }
+}
 
 fun initHabitLabRuntime(
     platformDescriptor: PlatformDescriptor,
@@ -51,6 +79,7 @@ fun initHabitLabRuntime(
     return HabitLabRuntime(
         presenter = koin.get(),
         debugDatabaseControl = if (isDebugBuild) koin.get() else null,
+        debugDatabaseBootstrap = if (isDebugBuild) koin.get() else null,
     )
 }
 
@@ -59,11 +88,15 @@ fun initHabitLabKoin(
     platformDescriptor: PlatformDescriptor,
     database: HabitLabDatabase,
     isDebugBuild: Boolean,
-): AppPresenter = initHabitLabRuntime(
-    platformDescriptor = platformDescriptor,
-    database = database,
-    isDebugBuild = isDebugBuild,
-).presenter
+): AppPresenter {
+    val runtime = initHabitLabRuntime(
+        platformDescriptor = platformDescriptor,
+        database = database,
+        isDebugBuild = isDebugBuild,
+    )
+    runtime.initialize()
+    return runtime.presenter
+}
 
 private fun habitLabModule(
     platformDescriptor: PlatformDescriptor,
@@ -72,9 +105,14 @@ private fun habitLabModule(
 ) = module {
     single<PlatformDescriptor> { platformDescriptor }
     single { database }
+    single {
+        DatabaseReadiness(
+            if (isDebugBuild) DatabaseReadinessState.Initializing else DatabaseReadinessState.Ready,
+        )
+    }
     single { RoomExperimentLocalDataSource(database = get()) }
     single<ExperimentRepository> { RoomExperimentRepository(localDataSource = get()) }
-    single { RoomExperimentObservers(localDataSource = get()) }
+    single { RoomExperimentObservers(localDataSource = get(), databaseReadiness = get()) }
     single<ExperimentProjectionObserver> { get<RoomExperimentObservers>() }
     single<ExperimentListObserver> { get<RoomExperimentObservers>() }
     single<DailyCheckInObserver> { get<RoomExperimentObservers>() }
@@ -84,14 +122,8 @@ private fun habitLabModule(
     single { EditExperimentDraft(repository = get(), recordedAtSource = get()) }
     single { RecordDailyCheckIn(repository = get(), recordedAtSource = get()) }
     if (isDebugBuild) {
-        single(createdAtStart = true) {
-            DebugExperimentDatabaseControl(localDataSource = get()).also { debugControl ->
-                // The debug seed is complete before a ViewModel can subscribe and see a false missing state.
-                check(runBlocking { debugControl.seedIfEmpty() } !is DebugDatabaseSeedResult.Failed) {
-                    "Debug database seed failed"
-                }
-            }
-        }
+        single { DebugExperimentDatabaseControl(localDataSource = get()) }
+        single { DebugDatabaseBootstrap(debugDatabaseControl = get(), databaseReadiness = get()) }
     }
     single<AppMetadataRepository> {
         AppMetadataRepositoryImpl(

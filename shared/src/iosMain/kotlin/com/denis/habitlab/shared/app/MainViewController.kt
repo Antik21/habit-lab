@@ -19,8 +19,12 @@ fun MainViewController(
 fun createIosHabitLabRuntime(
     platformDescriptor: PlatformDescriptor,
     isDebugBuild: Boolean,
-): HabitLabRuntime = initHabitLabRuntime(
-    platformDescriptor = platformDescriptor,
-    database = createHabitLabDatabase(),
-    isDebugBuild = isDebugBuild,
-)
+): HabitLabRuntime {
+    val runtime = initHabitLabRuntime(
+        platformDescriptor = platformDescriptor,
+        database = createHabitLabDatabase(),
+        isDebugBuild = isDebugBuild,
+    )
+    runtime.initialize()
+    return runtime
+}
