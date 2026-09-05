@@ -61,8 +61,28 @@ class ConfirmDeleteViewModelTest {
         }
     }
 
+    @Test
+    fun failedDeleteCanBeRetriedOnTheSameViewModelAndResolveWhenTheRetrySucceeds() = runTest {
+        val repository = DeleteRepository(
+            DeleteExperimentResult.Failed(StorageFailure(StorageOperation.DELETE_EXPERIMENT)),
+            DeleteExperimentResult.Deleted(experimentId),
+        )
+        val viewModel = ConfirmDeleteViewModel(experimentId, DeleteExperiment(repository))
+
+        viewModel.test(this) {
+            viewModel.dispatchAction(Action.ConfirmClicked)
+            expectState { copy(isDeleting = true) }
+            expectState { copy(isDeleting = false, commandError = true) }
+
+            viewModel.dispatchAction(Action.ConfirmClicked)
+            expectState { copy(isDeleting = true, commandError = false) }
+            expectSideEffect(NavigationEffect.Resolve(DeleteDialogResult.Confirmed(experimentId)))
+            assertEquals(2, repository.deleteCalls)
+        }
+    }
+
     private class DeleteRepository(
-        private val result: DeleteExperimentResult,
+        private vararg val results: DeleteExperimentResult,
     ) : ExperimentRepository {
         var deleteCalls = 0
 
@@ -78,6 +98,7 @@ class ConfirmDeleteViewModelTest {
             error("Unexpected check-in")
 
         override suspend fun deleteExperiment(experimentId: ExperimentId): DeleteExperimentResult {
+            val result = results.getOrNull(deleteCalls) ?: error("Unexpected delete")
             deleteCalls += 1
             return result
         }
