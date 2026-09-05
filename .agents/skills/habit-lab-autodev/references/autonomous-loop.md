@@ -29,7 +29,7 @@ Run the narrow checks while iterating and the required owner gate afterward. Exe
 
 ## 6. Cleanup and gate
 
-Stop app/process resources started by the run when safe, release virtual-device use, and remove temporary scratch data. Preserve only the intended ignored evidence and source changes. Evaluate the frozen checklist and required checks without changing their criteria.
+Stop, release, or delete only app/process resources and scratch paths created by this run, plus reservations explicitly acquired by this run. Preserve every pre-existing, concurrent-run, and user-owned process, virtual device, reservation, file, state, and canonical artifact. Preserve the current run's intended ignored evidence and source changes. Evaluate the frozen checklist and required checks without changing their criteria.
 
 ## 7. Draft PR or report
 
@@ -38,7 +38,7 @@ Only a passing gate with complete evidence permits `success` and, when authorize
 Choose one terminal outcome:
 
 - `success`: all frozen assertions and required checks pass with preserved evidence.
-- `blocked`: an external prerequisite or required platform is unavailable; identify the exact unblock action.
+- `blocked`: an external prerequisite or required platform is unavailable, or no task playbook supports the request. Identify the exact unblock action. For an unsupported task type, name the appropriate alternate workflow or a concrete action or condition that would make a supported playbook apply.
 - `failed`: the attempt completed but a required assertion or check failed; preserve diagnostics.
 - `partial`: useful scoped work exists, but the full requested contour was neither proved nor externally blocked. Enumerate completed and missing assertions.
 

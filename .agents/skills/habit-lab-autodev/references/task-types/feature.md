@@ -8,7 +8,7 @@ Map the blast radius through the root router: shared domain/data/presentation/ap
 
 ## Implement and prove
 
-Implement the smallest coherent vertical slice. New or substantially changed product UI remains common and follows the Compose rule. App interactions use semantic automation IDs on both bridges.
+Implement the smallest coherent vertical slice. New or substantially changed product UI remains common and follows the Compose rule. App interactions use semantic automation IDs on every requested platform bridge; verify both only when both platforms or the cross-platform bridge contract are explicitly in scope.
 
 Capture direct evidence for every acceptance assertion on every requested emulator/simulator. Add targeted checks at changed ownership boundaries and run the required owner gate. Exercise adjacent entry, exit, back, retry/error, and persistence behavior selected by the blast-radius analysis.
 

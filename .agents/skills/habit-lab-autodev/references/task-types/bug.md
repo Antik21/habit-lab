@@ -2,7 +2,7 @@
 
 ## Reproduce first
 
-Turn the report into a deterministic observation: preconditions, exact path, expected behavior, actual behavior, affected platform(s), and a stable assertion. Reproduce on every platform claimed affected and preserve baseline evidence before editing.
+Turn the report into a deterministic observation: preconditions, exact path, expected behavior, actual behavior, affected platform(s), and a stable assertion. Attempt reproduction on every platform requested by the user, record whether it reproduced on each one, and preserve baseline evidence before editing.
 
 If the bug does not reproduce, inspect task facts, build/source revision, environment parity, persisted state, and selector contract. Retry only when a concrete mismatch justifies it. If the reported behavior still cannot be reproduced, stop speculative implementation and report `blocked` or `failed` with the attempts and evidence. Do not guess a fix from symptoms alone.
 

@@ -7,11 +7,13 @@ The current repository-owned UI baseline is the Maestro runner and common refere
 For app-owned controls and assertions:
 
 1. Use a stable semantic ID from the production automation contract.
-2. If the ID is missing, add or correct the semantic production contract in the owning shared UI when that is within task scope, then verify both native bridges.
-3. If the ID is present but not exposed, diagnose and fix the owning bridge or report the blocker.
+2. If the shared ID is missing, add or correct it through the existing shared `AutomationId` plus `autodevId` contract in the owning UI when that is within task scope; do not introduce a plain `testTag` selector contract.
+3. If an existing shared ID is not exposed, diagnose and fix the owning bridge for each requested platform or report the blocker.
 4. If neither change is authorized, stop that assertion as `blocked` or `failed` with evidence.
 
-Never fall back to localized labels, accessibility text containing user/runtime data, list position, visual matching that changes the contract, or screen coordinates. Coordinates are forbidden for app controls even when they seem stable.
+Verify the corrected shared contract on every requested platform bridge. Verify both bridges only when both platforms are requested or the frozen scope explicitly requires the cross-platform bridge contract; do not expand a single-platform task merely to exercise an unrequested bridge.
+
+Never use any accessibility-text or label selector for app-owned controls. Never fall back to localized text, runtime/user values, list position, visual matching that changes the contract, or screen coordinates. Coordinates are forbidden for app controls even when they seem stable.
 
 Platform-only system back or edge gestures may use repository-owned platform subflows. Percentage coordinates are permitted only for the native iOS edge gesture identified by [ADR 0003](../../../../docs/adr/0003-maestro-cross-platform-ui-automation.md); do not generalize that exception.
 

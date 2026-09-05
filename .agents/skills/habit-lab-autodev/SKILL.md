@@ -11,9 +11,9 @@ Use this skill only for the explicit end-to-end request described above. User au
 
 1. Read the repository [request router](../../../AGENTS.md), [documentation governance](../../docs/00-routing.md), [toolchain catalog](../../docs/01-stack-toolchain.md), and [verification policy](../../docs/07-testing-verification.md).
 2. Read [setup and environment](references/setup-and-env.md), [autonomous loop](references/autonomous-loop.md), [UI automation](references/ui-automation.md), and [self-verification](references/self-verification.md).
-3. Classify the task and read exactly one playbook: [bug](references/task-types/bug.md), [feature](references/task-types/feature.md), or [performance](references/task-types/perf.md).
+3. Classify the task and read exactly one playbook: [bug](references/task-types/bug.md), [feature](references/task-types/feature.md), or [performance](references/task-types/perf.md). If none applies, stop before editing with `blocked` and identify the unsupported task type; there is no generic fallback.
 4. Select each requested platform and read its playbook: [Android](references/platforms/android.md) and/or [iOS](references/platforms/ios.md).
-5. Follow the matching root route for affected code: screen, route, dialog, repository-room, Android adapter, iOS adapter, dependency-toolchain, or tests-verification. Read only that route's linked policy.
+5. Follow every matching root route for all affected boundaries: screen, route, dialog, repository-room, Android adapter, iOS adapter, dependency-toolchain, or tests-verification. Read only the union of policies linked by those routes.
 
 ## Shared invariants
 
