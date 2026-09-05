@@ -143,17 +143,12 @@ def safe_path(root, relative, allow_missing=False):
     return current
 
 
-def open_directory(path, create=False):
+def open_directory(path):
     if not path.is_absolute():
         raise MemoryError("runtime directory path must be absolute", EXIT_INTEGRITY)
     fd = os.open(os.path.sep, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
         for part in path.parts[1:]:
-            if create:
-                try:
-                    os.mkdir(part, 0o700, dir_fd=fd)
-                except FileExistsError:
-                    pass
             next_fd = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
             os.close(fd)
             fd = next_fd
@@ -244,18 +239,6 @@ def atomic_bytes_at(directory_fd, name, encoded):
         raise
 
 
-def atomic_json(path, value):
-    encoded = canonical(value) + b"\n"
-    directory_fd = open_directory(path.parent, create=True)
-    try:
-        atomic_bytes_at(directory_fd, path.name, encoded)
-    except OSError as exc:
-        raise MemoryError("cannot atomically write artifact: %s" % exc, EXIT_IO)
-    finally:
-        os.close(directory_fd)
-    return sha_bytes(encoded)
-
-
 def skill_root(root):
     return safe_path(root, ".agents/skills/habit-lab-autodev")
 
@@ -268,33 +251,84 @@ def artifacts_dir(root, run_id=None):
     return path
 
 
+def ensure_artifacts_dir(root):
+    """Create only the helper-owned `.autodev/artifacts` trailing directories."""
+    repo_fd = open_directory(root)
+    auto_fd = -1
+    artifacts_fd = -1
+    try:
+        for parent_fd, name in ((repo_fd, ".autodev"),):
+            try:
+                os.mkdir(name, 0o700, dir_fd=parent_fd)
+            except FileExistsError:
+                pass
+        auto_fd = os.open(".autodev", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=repo_fd)
+        try:
+            os.mkdir("artifacts", 0o700, dir_fd=auto_fd)
+        except FileExistsError:
+            pass
+        artifacts_fd = os.open("artifacts", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=auto_fd)
+        for info in (os.fstat(auto_fd), os.fstat(artifacts_fd)):
+            if (not stat.S_ISDIR(info.st_mode) or
+                    (hasattr(os, "getuid") and info.st_uid != os.getuid())):
+                raise MemoryError("AutoDev artifacts directory identity is invalid", EXIT_INTEGRITY)
+        verify_child_identity(repo_fd, ".autodev", auto_fd, "AutoDev runtime root")
+        verify_child_identity(auto_fd, "artifacts", artifacts_fd, "AutoDev artifacts root")
+    except OSError as exc:
+        raise MemoryError("cannot safely create AutoDev artifacts directory: %s" % exc, EXIT_IO)
+    finally:
+        if artifacts_fd >= 0:
+            os.close(artifacts_fd)
+        if auto_fd >= 0:
+            os.close(auto_fd)
+        os.close(repo_fd)
+    return artifacts_dir(root)
+
+
 def ledger_path(root, run_id):
     safe_run_id(run_id)
     return artifacts_dir(root, run_id) / LEDGER_NAME
 
 
 @contextlib.contextmanager
-def locked_directory(path, create=False):
-    directory_fd = open_directory(path, create=create)
+def locked_directory(path, lock_name=".memory.lock"):
+    directory_fd = open_directory(path)
     lock_fd = -1
     try:
-        lock_fd = os.open(".memory.lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600,
+        lock_fd = os.open(lock_name, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600,
                           dir_fd=directory_fd)
         fcntl.flock(lock_fd, fcntl.LOCK_EX)
-        before = os.fstat(directory_fd)
-        yield directory_fd
-        after = os.fstat(directory_fd)
-        if (before.st_dev, before.st_ino, before.st_mode) != (after.st_dev, after.st_ino, after.st_mode):
-            raise MemoryError("runtime directory changed while locked", EXIT_INTEGRITY)
-        reopened = open_directory(path)
-        try:
-            linked = os.fstat(reopened)
-        finally:
-            os.close(reopened)
-        if (before.st_dev, before.st_ino, before.st_mode) != (linked.st_dev, linked.st_ino, linked.st_mode):
-            raise MemoryError("runtime directory path was replaced while locked", EXIT_INTEGRITY)
     except OSError as exc:
+        os.close(directory_fd)
         raise MemoryError("cannot lock runtime directory: %s" % exc, EXIT_IO)
+    try:
+        before = os.fstat(directory_fd)
+    except OSError as exc:
+        with contextlib.suppress(OSError):
+            fcntl.flock(lock_fd, fcntl.LOCK_UN)
+        with contextlib.suppress(OSError):
+            os.close(lock_fd)
+        os.close(directory_fd)
+        raise MemoryError("cannot inspect locked runtime directory: %s" % exc, EXIT_IO)
+    try:
+        try:
+            yield directory_fd
+        except BaseException:
+            raise
+        else:
+            try:
+                after = os.fstat(directory_fd)
+                if (before.st_dev, before.st_ino, before.st_mode) != (after.st_dev, after.st_ino, after.st_mode):
+                    raise MemoryError("runtime directory changed while locked", EXIT_INTEGRITY)
+                reopened = open_directory(path)
+                try:
+                    linked = os.fstat(reopened)
+                finally:
+                    os.close(reopened)
+                if (before.st_dev, before.st_ino, before.st_mode) != (linked.st_dev, linked.st_ino, linked.st_mode):
+                    raise MemoryError("runtime directory path was replaced while locked", EXIT_INTEGRITY)
+            except OSError as exc:
+                raise MemoryError("cannot revalidate locked runtime directory: %s" % exc, EXIT_IO)
     finally:
         if lock_fd >= 0:
             with contextlib.suppress(OSError):
@@ -302,6 +336,13 @@ def locked_directory(path, create=False):
             with contextlib.suppress(OSError):
                 os.close(lock_fd)
         os.close(directory_fd)
+
+
+@contextlib.contextmanager
+def self_patch_lifecycle(root):
+    """Serialize reserve, Git mutation, and rollback for one local checkout."""
+    with locked_directory(ensure_artifacts_dir(root), ".self-patch.lifecycle.lock"):
+        yield
 
 
 def read_json_locked(directory_fd, name, label):
@@ -383,6 +424,12 @@ def load_catalog(root):
             raise MemoryError("catalog route key and destination must be paired only for nav screens", EXIT_INTEGRITY)
         safe_path(skill_root(root), path)
         entries.append(item)
+    initial_paths = {"memory.screen-navigation": "memory/screen-navigation.md",
+                     "memory.lessons": "memory/lessons.md"}
+    for entry_id, expected_path in initial_paths.items():
+        matches = [item for item in entries if item["id"] == entry_id]
+        if len(matches) != 1 or matches[0]["path"] != expected_path:
+            raise MemoryError("memory catalog must pin the two initial entry paths", EXIT_INTEGRITY)
     return entries
 
 
@@ -390,7 +437,8 @@ def word_count(value):
     return len(re.findall(r"\b[\w'-]+\b", value, flags=re.UNICODE))
 
 
-def status_gate(root, run_id):
+def read_gate_status(root, run_id):
+    """Return the gate's already-validated status for this exact run identity."""
     safe_run_id(run_id)
     gate = skill_root(root) / "scripts/autodev_gate.py"
     command = [sys.executable, str(gate), "status", run_id]
@@ -400,8 +448,22 @@ def status_gate(root, run_id):
         payload = json.loads(result.stdout.strip())
     except (OSError, subprocess.SubprocessError, json.JSONDecodeError) as exc:
         raise MemoryError("autodev gate status is unavailable: %s" % exc, EXIT_IO)
-    if result.returncode != 0 or not isinstance(payload, dict) or payload.get("ok") is not True:
+    if (result.returncode != 0 or not isinstance(payload, dict) or payload.get("ok") is not True or
+            payload.get("runId") != run_id):
         raise MemoryError("autodev gate status did not validate the source run", EXIT_GATE)
+    return payload
+
+
+def active_gate_run(root, run_id):
+    """Validate an unsealed matching gate run before its memory receipt exists."""
+    payload = read_gate_status(root, run_id)
+    if payload.get("terminal") is not None:
+        raise MemoryError("matching gate run is no longer active", EXIT_GATE)
+    return payload
+
+
+def status_gate(root, run_id):
+    payload = read_gate_status(root, run_id)
     terminal = payload.get("terminal")
     if not isinstance(terminal, dict) or terminal.get("outcome") != "success" or payload.get("passing") is not True:
         raise MemoryError("source run is not sealed terminal success", EXIT_GATE)
@@ -468,6 +530,13 @@ def validate_ledger(value, run_id):
         loaded_ids.append(item["entryId"])
     if len(loaded_ids) != len(set(loaded_ids)) or not set(INITIAL_IDS).issubset(loaded_ids):
         raise MemoryError("memory ledger has invalid loaded entries", EXIT_INTEGRITY)
+    planned = value["plannedEntryIds"]
+    if (len(planned) > 3 or len(planned) != len(set(planned)) or
+            any(not isinstance(item, str) or not ID_RE.fullmatch(item) or item in INITIAL_IDS for item in planned)):
+        raise MemoryError("memory ledger plan is invalid", EXIT_INTEGRITY)
+    non_initial_loaded = set(loaded_ids) - set(INITIAL_IDS)
+    if len(non_initial_loaded) > 3 or not non_initial_loaded.issubset(set(planned)):
+        raise MemoryError("memory ledger loads escape its final plan", EXIT_INTEGRITY)
     for label in ("reads", "writes"):
         seen = set()
         for item in value[label]:
@@ -610,6 +679,7 @@ def verified_gate_attachment(root, run_id, artifact_fd):
         if manifest_anchor["manifestDigest"] != sha_json(manifest):
             raise MemoryError("gate manifest anchor does not match", EXIT_INTEGRITY)
         validate_gate_manifest(manifest, run_id)
+        revalidate_attachment.source_revision = manifest["sourceRevision"]
         yield revalidate_attachment
         revalidate_attachment()
     except OSError as exc:
@@ -628,6 +698,16 @@ def verified_gate_attachment(root, run_id, artifact_fd):
             os.close(auto_fd)
         if repo_fd >= 0:
             os.close(repo_fd)
+
+
+def gate_manifest_source_revision(root, run_id):
+    artifact_fd = open_directory(artifacts_dir(root, run_id))
+    try:
+        with verified_gate_attachment(root, run_id, artifact_fd) as revalidate_attachment:
+            revalidate_attachment()
+            return revalidate_attachment.source_revision
+    finally:
+        os.close(artifact_fd)
 
 
 def create_initial_ledger_at(base_fd, run_id, run_fd, ledger, revalidate_attachment=None):
@@ -682,8 +762,8 @@ def create_initial_ledger_at(base_fd, run_id, run_fd, ledger, revalidate_attachm
 
 def create_ledger(root, ledger):
     run_id = ledger["runId"]
-    base = artifacts_dir(root)
-    with locked_directory(base, create=True) as base_fd:
+    base = ensure_artifacts_dir(root)
+    with locked_directory(base) as base_fd:
         attached = False
         try:
             os.mkdir(run_id, 0o700, dir_fd=base_fd)
@@ -725,7 +805,7 @@ def create_run_artifact(root, run_id, name, value):
 
 
 def create_json_file(path, value, label):
-    directory_fd = open_directory(path.parent, create=True)
+    directory_fd = open_directory(path.parent)
     encoded = canonical(value) + b"\n"
     try:
         fd = os.open(path.name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600,
@@ -896,9 +976,15 @@ def parse_build(value):
 
 
 def capture_paths(root, values, label):
+    if len(values) != len(set(values)):
+        raise MemoryError("duplicate %s values are not allowed" % label)
     records = []
-    for value in sorted(set(values)):
+    paths = set()
+    for value in sorted(values):
         relative = checked_relative(value, label).as_posix()
+        if relative in paths:
+            raise MemoryError("duplicate %s values are not allowed" % label)
+        paths.add(relative)
         path = safe_path(root, relative)
         records.append({"path": relative, "sha256": sha_bytes(read_bytes(path, relative))})
     return records
@@ -958,7 +1044,7 @@ def correction_store_path(root):
 
 
 def load_global_json(root, name, label, fallback):
-    with locked_directory(artifacts_dir(root), create=True) as directory_fd:
+    with locked_directory(ensure_artifacts_dir(root)) as directory_fd:
         try:
             value, digest_value = read_json_locked(directory_fd, name, label)
         except MemoryError as exc:
@@ -973,7 +1059,7 @@ def load_global_json(root, name, label, fallback):
 
 def save_global_json(root, name, value, label):
     expected = GLOBAL_EXPECTED.get(name)
-    with locked_directory(artifacts_dir(root), create=True) as directory_fd:
+    with locked_directory(ensure_artifacts_dir(root)) as directory_fd:
         if expected is None:
             try:
                 read_bytes_at(directory_fd, name, label)
@@ -1014,6 +1100,7 @@ def load_corrections(root):
     if not isinstance(data, list):
         raise MemoryError("correction observations are not a JSON list", EXIT_INTEGRITY)
     records = []
+    gate_cache = {}
     pairs, proposals = set(), {}
     for item in data:
         require_exact(item, CORRECTION_FIELDS, "correction observation")
@@ -1032,34 +1119,116 @@ def load_corrections(root):
         prior = proposals.setdefault(proposal["proposalId"], canonical(proposal))
         if prior != canonical(proposal):
             raise MemoryError("matching correction proposal IDs diverge", EXIT_INTEGRITY)
-        gate, gate_digest = source_run_success(root, item["runId"])
+        gate, gate_digest = source_run_success(root, item["runId"], gate_cache)
         if item["gateStatusSha256"] != gate_digest:
             raise MemoryError("correction observation gate status was tampered or became invalid", EXIT_INTEGRITY)
         records.append(item)
     return records
 
 
-def source_run_success(root, run_id):
+def source_run_success(root, run_id, gate_cache=None):
     ledger = load_ledger(root, run_id)
     if ledger["outcome"] != "success":
         raise MemoryError("correction source is not this run's finalized success", EXIT_GATE)
-    gate = status_gate(root, run_id)
-    digest = sha_json(gate)
+    if gate_cache is not None and run_id in gate_cache:
+        gate, digest = gate_cache[run_id]
+    else:
+        gate = status_gate(root, run_id)
+        digest = sha_json(gate)
+        if gate_cache is not None:
+            gate_cache[run_id] = (gate, digest)
     if ledger["gateStatusSha256"] is not None and ledger["gateStatusSha256"] != digest:
         raise MemoryError("source gate evidence no longer matches its terminal memory ledger", EXIT_INTEGRITY)
     return gate, digest
 
 
-def memory_receipt(root, run_id, revision, structure_changed, eval_receipt, instruction_patch_count):
+def structural_instruction_contract(root, source_revision, checked_revision):
+    result = subprocess.run(["git", "diff", "--name-only", source_revision, checked_revision, "--"],
+                            cwd=str(root), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            text=True, check=False)
+    if result.returncode:
+        raise MemoryError("cannot determine structural instruction changes", EXIT_IO)
+    prefix = ".agents/skills/habit-lab-autodev/memory/instructions/"
+    paths = sorted(line for line in result.stdout.splitlines() if line.startswith(prefix))
+    if len(paths) > 1:
+        raise MemoryError("at most one structural instruction change may be sealed", EXIT_GATE)
+    if paths:
+        isolated = subprocess.run(["git", "diff-tree", "--no-commit-id", "--name-only", "-r", checked_revision],
+                                  cwd=str(root), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                  text=True, check=False)
+        isolated_paths = sorted(line for line in isolated.stdout.splitlines() if line)
+        if isolated.returncode or isolated_paths != paths:
+            raise MemoryError("structural instruction change is not an isolated commit", EXIT_GATE)
+    records = [{"path": path, "sha256": sha_bytes(commit_blob(root, checked_revision, path,
+                                                                 "structural instruction record"))}
+               for path in paths]
+    return paths, sha_json({"sourceRevision": checked_revision, "paths": records})
+
+
+def catalog_paths_at_revision(root, revision):
+    try:
+        catalog = json.loads(commit_blob(root, revision,
+                                         ".agents/skills/habit-lab-autodev/memory/catalog.json",
+                                         "memory catalog").decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise MemoryError("checked memory catalog is invalid: %s" % exc, EXIT_GATE)
+    require_exact(catalog, ("schemaVersion", "entries"), "checked memory catalog")
+    if catalog["schemaVersion"] != SCHEMA_VERSION or not isinstance(catalog["entries"], list):
+        raise MemoryError("checked memory catalog schema is invalid", EXIT_GATE)
+    mapped = {}
+    for item in catalog["entries"]:
+        require_exact(item, ("id", "path", "tags", "kind", "wordBudget", "routeKey", "destination"),
+                      "checked memory catalog entry")
+        if (not isinstance(item["id"], str) or not ID_RE.fullmatch(item["id"]) or
+                not isinstance(item["path"], str) or not item["path"].startswith("memory/") or
+                item["id"] in mapped):
+            raise MemoryError("checked memory catalog entry is invalid", EXIT_GATE)
+        mapped[item["id"]] = item["path"]
+    if (mapped.get("memory.screen-navigation") != "memory/screen-navigation.md" or
+            mapped.get("memory.lessons") != "memory/lessons.md"):
+        raise MemoryError("checked memory catalog does not pin initial entry paths", EXIT_GATE)
+    return mapped
+
+
+def preseal_memory_records(root, run_id, ledger, revision):
+    if any(type(ledger[field]) is not int or ledger[field] < 0
+           for field in ("durationSeconds", "iterations", "attempts")):
+        raise MemoryError("successful memory receipt needs finalized counters", EXIT_GATE)
+    catalog = catalog_paths_at_revision(root, revision)
+    for item in ledger["loadedEntries"]:
+        if catalog.get(item["entryId"]) != item["path"]:
+            raise MemoryError("loaded memory entry does not match checked catalog", EXIT_GATE)
+        source = ".agents/skills/habit-lab-autodev/" + item["path"]
+        if sha_bytes(commit_blob(root, revision, source, "loaded memory entry")) != item["sha256"]:
+            raise MemoryError("loaded memory entry does not match checked bytes", EXIT_GATE)
+    for label in ("reads", "writes"):
+        for item in ledger[label]:
+            path = item["path"]
+            artifact_prefixes = (".autodev/artifacts/%s/" % run_id, "build/maestro/%s/" % run_id)
+            if path.startswith(artifact_prefixes):
+                actual = sha_bytes(read_bytes(safe_path(root, path), "memory %s artifact" % label))
+            else:
+                source = ".agents/skills/habit-lab-autodev/" + path if path.startswith("memory/") else path
+                actual = sha_bytes(commit_blob(root, revision, source, "memory %s source" % label))
+            if actual != item["sha256"]:
+                raise MemoryError("memory %s does not match checked bytes" % label, EXIT_GATE)
+
+
+def memory_receipt(root, run_id, revision, eval_receipt):
     ledger = load_ledger(root, run_id)
     if ledger["outcome"] != "success":
         raise MemoryError("memory receipt requires a finalized successful memory run", EXIT_GATE)
-    if type(structure_changed) is not bool or type(instruction_patch_count) is not int or instruction_patch_count not in (0, 1):
-        raise MemoryError("memory receipt structure flags are invalid")
+    if revision != head_revision(root):
+        raise MemoryError("memory receipt source revision must be the current HEAD", EXIT_GATE)
+    preseal_memory_records(root, run_id, ledger, revision)
+    source_revision = gate_manifest_source_revision(root, run_id)
+    instruction_paths, structural_digest = structural_instruction_contract(root, source_revision, revision)
+    structure_changed = bool(instruction_paths)
+    instruction_patch_count = len(instruction_paths)
     if structure_changed:
         if not eval_receipt:
             raise MemoryError("structure-changing memory receipt requires a passing evaluation receipt", EXIT_GATE)
-        eval_digest = validate_eval_receipt(root, run_id, eval_receipt)
+        eval_digest = validate_eval_receipt(root, run_id, eval_receipt, revision, structural_digest)
         evaluation = {"path": eval_receipt, "sha256": eval_digest, "status": "pass"}
     elif eval_receipt:
         raise MemoryError("non-structural memory receipt cannot include an evaluation receipt", EXIT_GATE)
@@ -1218,6 +1387,7 @@ def load_self_patches(root):
     if not isinstance(value, list):
         raise MemoryError("self-patch commit history is invalid", EXIT_INTEGRITY)
     runs = set()
+    gate_cache = {}
     for item in value:
         require_exact(item, SELF_PATCH_FIELDS, "self-patch commit history entry")
         if (item["schemaVersion"] != SCHEMA_VERSION or not isinstance(item["record"], str) or
@@ -1236,7 +1406,7 @@ def load_self_patches(root):
               not isinstance(item["committedAt"], str) or not UTC_RE.fullmatch(item["committedAt"])):
             raise MemoryError("committed self-patch history is invalid", EXIT_INTEGRITY)
         if item["state"] == "committed":
-            source_run_success(root, item["runId"])
+            source_run_success(root, item["runId"], gate_cache)
             actual = committed_change_binding(root, item["commit"], item["record"],
                                               item["baseRevision"], require_current=False)
             if actual != item["changeDigest"]:
@@ -1245,9 +1415,36 @@ def load_self_patches(root):
     return value
 
 
-def self_patch_eligibility(root, run_id, record_path):
-    if any(item["runId"] == run_id for item in load_self_patches(root)):
+def release_self_patch_reservation(root, run_id, record, base_revision):
+    history = load_self_patches(root)
+    matches = [item for item in history if item["runId"] == run_id]
+    if (len(matches) != 1 or matches[0]["state"] != "reserved" or
+            matches[0]["record"] != record or matches[0]["baseRevision"] != base_revision):
+        raise MemoryError("self-patch reservation changed before safe rollback", EXIT_INTEGRITY)
+    history.remove(matches[0])
+    save_global_json(root, SELF_PATCHES_NAME, history, "self-patch commit history")
+
+
+def assert_reservation_compatible(history, run_id, eligibility):
+    matches = [item for item in history if item["runId"] == run_id]
+    if not matches:
+        return False
+    if len(matches) != 1:
+        raise MemoryError("self-patch commit history changed concurrently", EXIT_INTEGRITY)
+    reserved = matches[0]
+    if reserved["state"] == "committed":
         raise MemoryError("this successful run already consumed its one self-patch commit", EXIT_GATE)
+    if (reserved["state"] != "reserved" or reserved["commit"] is not None or
+            reserved["committedAt"] is not None or
+            any(reserved[field] != eligibility[key] for field, key in (
+                ("record", "record"), ("baseRevision", "baseRevision"),
+                ("changeDigest", "changeDigest")))):
+        raise MemoryError("self-patch reservation does not match the current isolated change", EXIT_INTEGRITY)
+    return True
+
+
+def self_patch_eligibility(root, run_id, record_path):
+    history = load_self_patches(root)
     _, gate_digest = source_run_success(root, run_id)
     rel, record = instruction_record(root, record_path)
     if record["runId"] != run_id:
@@ -1260,9 +1457,24 @@ def self_patch_eligibility(root, run_id, record_path):
         receipt_digest = validate_eval_receipt(root, run_id, record["evalReceipt"], revision, actual_change_digest)
     elif record["evalReceipt"] is not None:
         raise MemoryError("non-structural instruction record cannot carry an evaluation receipt", EXIT_INTEGRITY)
-    return {"record": rel, "gateStatusSha256": gate_digest, "evalReceiptSha256": receipt_digest,
-            "structureChange": record["structureChange"], "baseRevision": revision,
-            "changeDigest": actual_change_digest}
+    eligibility = {"record": rel, "gateStatusSha256": gate_digest, "evalReceiptSha256": receipt_digest,
+                   "structureChange": record["structureChange"], "baseRevision": revision,
+                   "changeDigest": actual_change_digest}
+    assert_reservation_compatible(history, run_id, eligibility)
+    return eligibility
+
+
+def reserve_or_resume_self_patch(root, run_id, eligibility):
+    """Reserve one eligible change, or recover the identical ordinary failed attempt."""
+    history = load_self_patches(root)
+    if not assert_reservation_compatible(history, run_id, eligibility):
+        history.append({"schemaVersion": SCHEMA_VERSION, "runId": run_id,
+                        "record": eligibility["record"], "state": "reserved",
+                        "baseRevision": eligibility["baseRevision"], "commit": None,
+                        "committedAt": None, "changeDigest": eligibility["changeDigest"]})
+        save_global_json(root, SELF_PATCHES_NAME, history, "self-patch commit history")
+        return False
+    return True
 
 
 def record_self_patch(root, run_id, record_path):
@@ -1300,7 +1512,7 @@ def parser():
     lint = sub.add_parser("lint", add_help=False); lint.add_argument("--run-id")
     status = sub.add_parser("status", add_help=False); status.add_argument("run_id")
     finalize = sub.add_parser("finalize", add_help=False); finalize.add_argument("run_id"); finalize.add_argument("--outcome", choices=OUTCOMES, required=True); finalize.add_argument("--duration-seconds", type=int, default=0); finalize.add_argument("--build", action="append", default=[]); finalize.add_argument("--iterations", type=int, default=0); finalize.add_argument("--attempts", type=int, default=0); finalize.add_argument("--platform", action="append", choices=("android", "ios"), default=[]); finalize.add_argument("--flaky-step", action="append", default=[]); finalize.add_argument("--read", action="append", default=[]); finalize.add_argument("--write", action="append", default=[]); finalize.add_argument("--gate-run")
-    receipt = sub.add_parser("receipt", add_help=False); receipt.add_argument("run_id"); receipt.add_argument("--source-revision", required=True); receipt.add_argument("--structure-changed", action="store_true"); receipt.add_argument("--eval-receipt"); receipt.add_argument("--instruction-patch-count", type=int, default=0)
+    receipt = sub.add_parser("receipt", add_help=False); receipt.add_argument("run_id"); receipt.add_argument("--source-revision", required=True); receipt.add_argument("--eval-receipt")
     consolidate = sub.add_parser("consolidate", add_help=False); consolidate.add_argument("--run-id")
     observe = sub.add_parser("observe-correction", add_help=False); observe.add_argument("run_id"); observe.add_argument("--proposal-json", required=True)
     store = sub.add_parser("store-correction", add_help=False); store.add_argument("proposal_id"); store.add_argument("--run-id", required=True)
@@ -1340,6 +1552,8 @@ def main(argv=None):
             run_id = safe_run_id(args.run_id); ledger = load_ledger(root, run_id)
             if ledger["outcome"] is not None:
                 raise MemoryError("terminal memory ledger cannot be planned", EXIT_GATE)
+            if any(item["entryId"] not in INITIAL_IDS for item in ledger["loadedEntries"]):
+                raise MemoryError("memory plan cannot change after a non-initial entry was loaded", EXIT_GATE)
             tags = list(args.tag)
             if args.tags:
                 tags.extend(part for part in args.tags.split(",") if part)
@@ -1400,7 +1614,9 @@ def main(argv=None):
             if args.gate_run is not None:
                 if args.outcome != "success" or args.gate_run != run_id:
                     raise MemoryError("only matching successful memory finalize may bind a gate run", EXIT_GATE)
-                gate_digest = sha_json(status_gate(root, run_id))
+                # The gate is still unsealed: persisting its current status digest would
+                # necessarily become stale when the receipt allows terminal finish.
+                active_gate_run(root, run_id)
             ledger.update({"finalizedAt": utc_now(), "durationSeconds": args.duration_seconds,
                            "builds": [parse_build(item) for item in args.build], "iterations": args.iterations,
                            "attempts": args.attempts, "outcome": args.outcome,
@@ -1422,8 +1638,7 @@ def main(argv=None):
         elif args.command == "receipt":
             run_id = safe_run_id(args.run_id)
             receipt_value = memory_receipt(root, run_id, resolve_revision(root, args.source_revision),
-                                           args.structure_changed, args.eval_receipt,
-                                           args.instruction_patch_count)
+                                           args.eval_receipt)
             digest = create_run_artifact(root, run_id, "memory-receipt.json", receipt_value)
             payload = {"ok": True, "command": "receipt", "runId": run_id,
                        "receipt": ".autodev/artifacts/%s/memory-receipt.json" % run_id,
@@ -1468,31 +1683,33 @@ def main(argv=None):
             create_json_file(destination, record, "tracked correction record")
             payload = {"ok": True, "command": "store-correction", "path": "memory/code-corrections/%s.json" % proposal_id,
                        "stored": True}
-        elif args.command in ("self-patch-validate", "self-patch-commit"):
-            run_id = safe_run_id(args.run_id); eligibility = self_patch_eligibility(root, run_id, args.record)
-            if args.command == "self-patch-validate":
-                payload = {"ok": True, "command": "self-patch-validate", "runId": run_id,
-                           "eligible": True, **eligibility}
-            else:
-                if not args.confirm_commit:
-                    raise MemoryError("self-patch commit requires --confirm-commit", EXIT_USAGE)
-                if not isinstance(args.message, str) or not args.message.strip() or "\n" in args.message or len(args.message) > 120:
-                    raise MemoryError("self-patch commit message must be one nonempty line")
-                history = load_self_patches(root)
-                if any(item["runId"] == run_id for item in history):
-                    raise MemoryError("self-patch commit history changed concurrently", EXIT_INTEGRITY)
-                history.append({"schemaVersion": SCHEMA_VERSION, "runId": run_id,
-                                "record": eligibility["record"], "state": "reserved",
-                                "baseRevision": eligibility["baseRevision"], "commit": None,
-                                "committedAt": None, "changeDigest": eligibility["changeDigest"]})
-                save_global_json(root, SELF_PATCHES_NAME, history, "self-patch commit history")
+        elif args.command == "self-patch-validate":
+            run_id = safe_run_id(args.run_id)
+            eligibility = self_patch_eligibility(root, run_id, args.record)
+            payload = {"ok": True, "command": "self-patch-validate", "runId": run_id,
+                       "eligible": True, **eligibility}
+        elif args.command == "self-patch-commit":
+            run_id = safe_run_id(args.run_id)
+            if not args.confirm_commit:
+                raise MemoryError("self-patch commit requires --confirm-commit", EXIT_USAGE)
+            if not isinstance(args.message, str) or not args.message.strip() or "\n" in args.message or len(args.message) > 120:
+                raise MemoryError("self-patch commit message must be one nonempty line")
+            with self_patch_lifecycle(root):
+                eligibility = self_patch_eligibility(root, run_id, args.record)
+                reserve_or_resume_self_patch(root, run_id, eligibility)
+                pre_commit_head = head_revision(root)
                 result = subprocess.run(["git", "add", "--", eligibility["record"]], cwd=str(root), stdout=subprocess.PIPE,
                                         stderr=subprocess.PIPE, text=True, check=False)
                 if result.returncode:
+                    release_self_patch_reservation(root, run_id, eligibility["record"], eligibility["baseRevision"])
                     raise MemoryError("could not stage isolated instruction record", EXIT_IO)
                 result = subprocess.run(["git", "commit", "-m", args.message, "--", eligibility["record"]], cwd=str(root), stdout=subprocess.PIPE,
                                         stderr=subprocess.PIPE, text=True, check=False)
                 if result.returncode:
+                    if head_revision(root) == pre_commit_head:
+                        release_self_patch_reservation(root, run_id, eligibility["record"], eligibility["baseRevision"])
+                    else:
+                        raise MemoryError("self-patch commit result is uncertain; retain reservation and run self-patch-record", EXIT_INTEGRITY)
                     raise MemoryError("normal isolated self-patch commit was rejected", EXIT_GATE)
                 commit = head_revision(root)
                 payload = {"ok": True, "command": "self-patch-commit", "runId": run_id,
@@ -1500,7 +1717,8 @@ def main(argv=None):
                            "postCommitValidationRequired": True}
         elif args.command == "self-patch-record":
             run_id = safe_run_id(args.run_id)
-            completed = record_self_patch(root, run_id, args.record)
+            with self_patch_lifecycle(root):
+                completed = record_self_patch(root, run_id, args.record)
             payload = {"ok": True, "command": "self-patch-record", "runId": run_id,
                        "recorded": True, **completed}
         else:

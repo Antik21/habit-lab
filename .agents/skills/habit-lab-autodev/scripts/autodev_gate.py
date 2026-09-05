@@ -1385,32 +1385,6 @@ def revalidate_terminal(run: Run) -> Optional[Dict[str, Any]]:
     return terminal
 
 
-def anchored_digest(run: Run, parts: Sequence[str], label: str) -> str:
-    fd = open_anchored(run.repo_fd, parts)
-    try:
-        initial = os.fstat(fd)
-        if initial.st_size > MAX_SCAN_BYTES:
-            raise GateError("%s exceeds the bounded read size" % label, EXIT_GATE)
-        hasher = hashlib.sha256()
-        total = 0
-        while True:
-            chunk = os.read(fd, min(1024 * 1024, MAX_SCAN_BYTES - total + 1))
-            if not chunk:
-                break
-            total += len(chunk)
-            if total > MAX_SCAN_BYTES:
-                raise GateError("%s grew while reading" % label, EXIT_INTEGRITY)
-            hasher.update(chunk)
-        final = os.fstat(fd)
-        if ((initial.st_dev, initial.st_ino, initial.st_size, initial.st_mtime_ns, initial.st_ctime_ns) !=
-                (final.st_dev, final.st_ino, final.st_size, final.st_mtime_ns, final.st_ctime_ns) or
-                total != final.st_size):
-            raise GateError("%s changed while reading" % label, EXIT_INTEGRITY)
-        return hasher.hexdigest()
-    finally:
-        os.close(fd)
-
-
 def git_tree_blob(root: Path, revision: str, relative: str, label: str) -> bytes:
     candidate = Path(relative)
     if (not re.fullmatch(r"[0-9a-f]{40,64}", revision) or candidate.is_absolute() or not candidate.parts or
@@ -1426,6 +1400,31 @@ def git_tree_blob(root: Path, revision: str, relative: str, label: str) -> bytes
     if result.returncode or len(result.stdout) > MAX_SCAN_BYTES:
         raise GateError("cannot safely read %s from the checked revision tree" % label, EXIT_GATE)
     return result.stdout
+
+
+def structural_instruction_contract(root: Path, source_revision: str,
+                                   checked_revision: str) -> Tuple[List[str], str]:
+    result = subprocess.run(["git", "diff", "--name-only", source_revision, checked_revision, "--"],
+                            cwd=str(root), text=True, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, check=False)
+    if result.returncode:
+        raise GateError("cannot determine structural instruction changes", EXIT_GATE)
+    prefix = ".agents/skills/habit-lab-autodev/memory/instructions/"
+    paths = sorted(line for line in result.stdout.splitlines() if line.startswith(prefix))
+    if len(paths) > 1:
+        raise GateError("at most one structural instruction change may be sealed", EXIT_GATE)
+    if paths:
+        isolated = subprocess.run(["git", "diff-tree", "--no-commit-id", "--name-only", "-r", checked_revision],
+                                  cwd=str(root), text=True, stdout=subprocess.PIPE,
+                                  stderr=subprocess.PIPE, check=False)
+        isolated_paths = sorted(line for line in isolated.stdout.splitlines() if line)
+        if isolated.returncode or isolated_paths != paths:
+            raise GateError("structural instruction change is not an isolated commit", EXIT_GATE)
+    records = [{"path": path,
+                "sha256": hashlib.sha256(git_tree_blob(root, checked_revision, path,
+                                                         "structural instruction record")).hexdigest()}
+               for path in paths]
+    return paths, digest({"sourceRevision": checked_revision, "paths": records})
 
 
 def memory_catalog_at_revision(root: Path, revision: str) -> Dict[str, str]:
@@ -1446,6 +1445,9 @@ def memory_catalog_at_revision(root: Path, revision: str) -> Dict[str, str]:
                 ".." in Path(item["path"]).parts or item["id"] in mapped):
             raise GateError("current memory catalog entry is invalid", EXIT_GATE)
         mapped[item["id"]] = item["path"]
+    if (mapped.get("memory.screen-navigation") != "memory/screen-navigation.md" or
+            mapped.get("memory.lessons") != "memory/lessons.md"):
+        raise GateError("current memory catalog does not pin the initial entry paths", EXIT_GATE)
     return mapped
 
 
@@ -1534,9 +1536,8 @@ def validate_memory_receipt(root: Path, run: Run, receipt: Dict[str, Any],
                     item["path"] in seen):
                 raise GateError("memory ledger %s records are invalid" % field, EXIT_GATE)
             seen.add(item["path"])
-    read_write_paths = set()
-    validate_memory_file_records(root, run, checked_revision, "read", ledger["reads"], read_write_paths)
-    validate_memory_file_records(root, run, checked_revision, "write", ledger["writes"], read_write_paths)
+    validate_memory_file_records(root, run, checked_revision, "read", ledger["reads"], set())
+    validate_memory_file_records(root, run, checked_revision, "write", ledger["writes"], set())
     build_names = set()
     for item in ledger["builds"]:
         exact_keys(item, ("name", "status"), "memory ledger build", EXIT_GATE)
@@ -1593,24 +1594,10 @@ def validate_memory_receipt(root: Path, run: Run, receipt: Dict[str, Any],
         raise GateError("memory receipt lint did not pass exactly", EXIT_GATE)
     if type(receipt["structureChanged"]) is not bool or type(receipt["instructionPatchCount"]) is not int or not 0 <= receipt["instructionPatchCount"] <= 1:
         raise GateError("memory receipt structure fields are invalid", EXIT_GATE)
-    structural_result = subprocess.run(["git", "diff", "--name-only", run.manifest["sourceRevision"], checked_revision, "--"],
-                                       cwd=str(root), text=True, stdout=subprocess.PIPE,
-                                       stderr=subprocess.PIPE, check=False)
-    if structural_result.returncode:
-        raise GateError("cannot determine structural instruction changes", EXIT_GATE)
-    changed = [line for line in structural_result.stdout.splitlines() if line]
-    instruction_prefix = ".agents/skills/habit-lab-autodev/memory/instructions/"
-    instruction_paths = sorted(path for path in changed if path.startswith(instruction_prefix))
+    instruction_paths, change_digest = structural_instruction_contract(
+        root, run.manifest["sourceRevision"], checked_revision)
     if receipt["structureChanged"] != bool(instruction_paths) or receipt["instructionPatchCount"] != len(instruction_paths):
         raise GateError("memory receipt structure declaration does not match changed paths", EXIT_GATE)
-    if instruction_paths:
-        commit_paths_result = subprocess.run(["git", "diff-tree", "--no-commit-id", "--name-only", "-r", checked_revision],
-                                             cwd=str(root), text=True, stdout=subprocess.PIPE,
-                                             stderr=subprocess.PIPE, check=False)
-        commit_paths = sorted(line for line in commit_paths_result.stdout.splitlines() if line)
-        if commit_paths_result.returncode or commit_paths != instruction_paths:
-            raise GateError("structural instruction change is not an isolated commit", EXIT_GATE)
-    change_digest = digest({"paths": instruction_paths})
     evaluation = receipt["evalReceipt"]
     if receipt["structureChanged"]:
         exact_keys(evaluation, ("path", "sha256", "status"), "memory receipt evaluation", EXIT_GATE)

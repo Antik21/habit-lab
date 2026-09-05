@@ -27,7 +27,7 @@ Use commands selected from the owner catalog rather than copied into this skill.
 
 Run the narrow checks while iterating and the required owner gate afterward. Exercise the declared regression boundary on every requested platform. Obtain an independent review of the diff, checklist, evidence, architecture, safety, and compatibility; resolve justified findings and repeat affected checks.
 
-Use the progressive memory helper before `finish`: begin with its two initial records, select only relevant catalog entries, run lint, finalize the memory ledger, and create the revision-bound memory receipt. This is evidence for the frozen gate, not permission to change it.
+Use the progressive memory helper before `finish`: begin with its two initial records, select only relevant catalog entries, run lint, and finalize the memory ledger. On a success path, create the revision-bound memory receipt; blocked, failed, and partial paths retain the ledger without a promotable receipt. This is evidence for the frozen gate, not permission to change it.
 
 ## 6. Cleanup and gate
 
