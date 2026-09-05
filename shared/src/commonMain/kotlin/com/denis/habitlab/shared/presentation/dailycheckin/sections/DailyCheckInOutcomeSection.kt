@@ -8,6 +8,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import com.denis.habitlab.shared.presentation.dailycheckin.CheckInSelectionUiModel
 import com.denis.habitlab.shared.presentation.ui.automation.AutomationId
+import com.denis.habitlab.shared.presentation.ui.automation.autodevId
 import com.denis.habitlab.shared.presentation.ui.component.HabitLabPrimaryButton
 import com.denis.habitlab.shared.presentation.ui.component.HabitLabSecondaryButton
 import com.denis.habitlab.shared.presentation.ui.theme.HabitLabSpacing
@@ -24,7 +25,10 @@ internal fun DailyCheckInOutcomeSection(
     onPerformed: () -> Unit,
     onSkipped: () -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(HabitLabSpacing.Small)) {
+    Column(
+        modifier = Modifier.autodevId(selected.automationStateId()),
+        verticalArrangement = Arrangement.spacedBy(HabitLabSpacing.Small),
+    ) {
         HabitLabPrimaryButton(
             modifier = Modifier.fillMaxWidth(),
             label = stringResource(Res.string.daily_check_in_performed),
@@ -40,6 +44,11 @@ internal fun DailyCheckInOutcomeSection(
             enabled = enabled && selected != CheckInSelectionUiModel.SKIPPED,
         )
     }
+}
+
+private fun CheckInSelectionUiModel.automationStateId(): AutomationId = when (this) {
+    CheckInSelectionUiModel.PERFORMED -> AutomationId.DailyCheckInOutcomePerformed
+    CheckInSelectionUiModel.SKIPPED -> AutomationId.DailyCheckInOutcomeSkipped
 }
 
 @Preview

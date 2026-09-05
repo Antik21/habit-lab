@@ -8,6 +8,9 @@ readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 readonly REPOSITORY_ROOT="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
 readonly FLOW_FILE="$SCRIPT_DIR/flows/reference-screens.yaml"
 readonly CONFIG_FILE="$SCRIPT_DIR/config.yaml"
+readonly XCODE_VERSION_HELPER="$SCRIPT_DIR/lib/xcode-version.sh"
+readonly MIN_XCODE_MAJOR=26
+readonly MIN_XCODE_MINOR=4
 
 usage() {
     printf 'Usage: %s android|ios <device-id> [run-id]\n' "$0" >&2
@@ -99,6 +102,23 @@ set +e
         adb -s "$DEVICE_ID" install -r "$apk_path"
     else
         command -v xcrun >/dev/null 2>&1 || fail "Xcode command-line tools are required for the iOS runner"
+        # Use the xcodebuild selected by xcrun for both validation and the build.
+        readonly xcodebuild_bin="$(xcrun --find xcodebuild 2>/dev/null || true)"
+        [[ -n "$xcodebuild_bin" && -x "$xcodebuild_bin" ]] ||
+            fail "the selected Xcode does not provide an executable xcodebuild"
+        xcode_version_output="$("$xcodebuild_bin" -version 2>&1)" ||
+            fail "could not read the selected xcodebuild version"
+        printf 'xcodebuild_path=%s\n%s\n' "$xcodebuild_bin" "$xcode_version_output"
+
+        # shellcheck source=lib/xcode-version.sh
+        source "$XCODE_VERSION_HELPER"
+        xcode_version="$(parse_xcode_version "$xcode_version_output")"
+        [[ -n "$xcode_version" ]] ||
+            fail "could not parse the selected xcodebuild version"
+        if ! xcode_version_is_at_least "$xcode_version" "$MIN_XCODE_MAJOR" "$MIN_XCODE_MINOR"; then
+            fail "Xcode $MIN_XCODE_MAJOR.$MIN_XCODE_MINOR or newer is required; found $xcode_version"
+        fi
+
         xcrun simctl list devices available | grep -F "($DEVICE_ID)" >/dev/null ||
             fail "iOS simulator '$DEVICE_ID' is not available"
         xcrun simctl bootstatus "$DEVICE_ID" -b
@@ -108,7 +128,7 @@ set +e
 
         readonly derived_data="$ARTIFACT_DIR/DerivedData"
         readonly simulator_arch="$(uname -m)"
-        xcodebuild \
+        "$xcodebuild_bin" \
             -project iosApp/iosApp.xcodeproj \
             -scheme iosApp \
             -configuration Debug \

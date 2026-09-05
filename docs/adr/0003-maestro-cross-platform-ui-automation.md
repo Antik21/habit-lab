@@ -41,7 +41,7 @@ Evidence is isolated by run and platform under `build/maestro/<run-id>/<platform
 directory contains a command log, JUnit report, screenshots, and Maestro debug output. Generated
 evidence is ignored build output and is not committed.
 
-The execution baseline is simulator-only. The current local environment is macOS 26.6.2 arm64,
+The execution baseline is emulator/simulator-only. The current local environment is macOS 26.6.2 arm64,
 Xcode 26.6 with an iOS 26.5 simulator, an Android API 36 emulator, and JBR 21 for Maestro. Maestro
 requires JDK 17 or newer and does not require Python; local Python 3.9.6 is incidental. Repository CI
 continues to use Xcode 26.4.1 and Temurin 17 and does not yet run this Maestro contour.
@@ -98,26 +98,28 @@ Required verification is:
 - review of `command.log`, `report.xml`, screenshots, and debug output in each platform directory under
   `build/maestro/<run-id>/`.
 
-Canonical final run `den-15-evidence-guard` used freshly built current DEN-15 working-tree sources
-based on HEAD `e0434eb3719958586f8769c81f0fc554001fc84c` plus the task changes. Android passed 1/1 flows
-with zero failures in 40 seconds on `emulator-5554`, AVD `FO_Play_API36_1`, API 36. iOS passed 1/1
-flows with zero failures in 24 seconds on iPhone 17 Pro/iOS 26.5 simulator
+Canonical final run `den-15-pr-fixes` used freshly built current DEN-15 working-tree sources based on
+HEAD `7332fc54a78f5a8b4fde01f459fad4da584d4d7b` plus the review fixes. Android passed 1/1 flows with
+zero failures in 49 seconds on `emulator-5554`, AVD `FO_Play_API36_1`, API 36. iOS passed 1/1 flows
+with zero failures in 31 seconds on iPhone 17 Pro/iOS 26.5 simulator
 `19C4B36C-E2E9-43C3-BB33-B762FFDA5A08`.
 
 The common scenario proved all five production screens, stable-ID list selection and input, typed
-navigation, the selected-metric state ID, toolbar back, Android system back, and the iOS edge swipe
-using the sole percentage-coordinate exception. It also exercised Confirm Delete cancel and confirm
-paths and ended with a successful stable-ID `assertVisible` on Experiment List.
+navigation, the selected-metric and selected-outcome state IDs, toolbar back, Android system back,
+and the iOS leading-edge swipe with an RTL fallback using the sole percentage-coordinate exception.
+It also exercised Confirm Delete cancel and confirm paths and ended with a successful stable-ID
+`assertVisible` on Experiment List. The iOS runner recorded and enforced Xcode 26.6 against the
+minimum supported build baseline of Xcode 26.4.
 
-The ignored local directories `build/maestro/den-15-evidence-guard/android/` and
-`build/maestro/den-15-evidence-guard/ios/` each contain `command.log`, a zero-failure `report.xml`,
+The ignored local directories `build/maestro/den-15-pr-fixes/android/` and
+`build/maestro/den-15-pr-fixes/ios/` each contain `command.log`, a zero-failure `report.xml`,
 three screenshots, non-empty `debug/maestro.log`, and the common-flow command JSON. The runner now
 validates those evidence postconditions after execution. Neither directory contains a filename with
 `failure`, `error`, or `❌`, and the Maestro results contain no stale test failures. The iOS command
 log is not warning-free: its linker reports that `libicu.icudtl_dat.o` was built for iOS Simulator
-18.5 while the application target is 16.0. This is simulator-only local evidence: Maestro is still
-absent from repository CI, and minimum-iOS 16 runtime and linked-artifact compatibility proof remain
-pending.
+18.5 while the application target is 16.0. This is emulator/simulator-only local evidence: Maestro
+is still absent from repository CI, and minimum-iOS 16 runtime and linked-artifact compatibility
+proof remain pending.
 
 ## Related docs
 

@@ -89,6 +89,12 @@ tags:
 - takeScreenshot: daily-check-in
 - tapOn:
     id: habitlab.daily-check-in.action.skipped
+- extendedWaitUntil:
+    visible:
+      id: habitlab.daily-check-in.state.outcome.skipped
+    timeout: 10000
+- assertVisible:
+    id: habitlab.daily-check-in.state.outcome.skipped
 - tapOn:
     id: habitlab.daily-check-in.action.save
 - extendedWaitUntil:

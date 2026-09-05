@@ -70,6 +70,8 @@ enum class AutomationId(
     DailyCheckInBack("habitlab.daily-check-in.action.back"),
     DailyCheckInPerformed("habitlab.daily-check-in.action.performed"),
     DailyCheckInSkipped("habitlab.daily-check-in.action.skipped"),
+    DailyCheckInOutcomePerformed("habitlab.daily-check-in.state.outcome.performed"),
+    DailyCheckInOutcomeSkipped("habitlab.daily-check-in.state.outcome.skipped"),
     DailyCheckInSave("habitlab.daily-check-in.action.save"),
     DailyCheckInLoading("habitlab.daily-check-in.state.loading"),
     DailyCheckInError("habitlab.daily-check-in.state.error"),
