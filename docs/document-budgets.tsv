@@ -12,8 +12,8 @@ README.md	450
 .agents/docs/07-testing-verification.md	700
 .agents/docs/08-libraries-licenses.md	700
 .agents/docs/09-common-cases.md	650
-.agents/skills/habit-lab-autodev/SKILL.md	500
-.agents/skills/habit-lab-autodev/evals/scenarios.md	1000
+.agents/skills/habit-lab-autodev/SKILL.md	550
+.agents/skills/habit-lab-autodev/evals/scenarios.md	1100
 .agents/skills/habit-lab-autodev/memory/lessons.md	500
 .agents/skills/habit-lab-autodev/memory/nav/_SCHEMA.md	500
 .agents/skills/habit-lab-autodev/memory/nav/daily-check-in/logic.md	500
@@ -32,6 +32,7 @@ README.md	450
 .agents/skills/habit-lab-autodev/references/platforms/android.md	500
 .agents/skills/habit-lab-autodev/references/platforms/ios.md	500
 .agents/skills/habit-lab-autodev/references/self-verification.md	700
+.agents/skills/habit-lab-autodev/references/self-learning.md	600
 .agents/skills/habit-lab-autodev/references/setup-and-env.md	700
 .agents/skills/habit-lab-autodev/references/task-types/bug.md	500
 .agents/skills/habit-lab-autodev/references/task-types/feature.md	500

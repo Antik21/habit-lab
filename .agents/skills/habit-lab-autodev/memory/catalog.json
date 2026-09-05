@@ -1,0 +1,113 @@
+{
+  "schemaVersion": 1,
+  "entries": [
+    {
+      "id": "memory.screen-navigation",
+      "path": "memory/screen-navigation.md",
+      "tags": ["memory", "navigation", "index"],
+      "kind": "navigation-index",
+      "wordBudget": 350,
+      "routeKey": null,
+      "destination": null
+    },
+    {
+      "id": "memory.lessons",
+      "path": "memory/lessons.md",
+      "tags": ["memory", "lesson", "policy", "evidence"],
+      "kind": "lesson-policy",
+      "wordBudget": 300,
+      "routeKey": null,
+      "destination": null
+    },
+    {
+      "id": "nav.experiment-list.screen",
+      "path": "memory/nav/experiment-list/screen.md",
+      "tags": ["navigation", "screen", "experiment", "list", "gallery"],
+      "kind": "nav-screen",
+      "wordBudget": 500,
+      "routeKey": "Gallery",
+      "destination": "AppDestination.Gallery"
+    },
+    {
+      "id": "nav.experiment-list.logic",
+      "path": "memory/nav/experiment-list/logic.md",
+      "tags": ["navigation", "logic", "experiment", "list", "gallery"],
+      "kind": "supporting-logic",
+      "wordBudget": 180,
+      "routeKey": null,
+      "destination": null
+    },
+    {
+      "id": "nav.experiment-details.screen",
+      "path": "memory/nav/experiment-details/screen.md",
+      "tags": ["navigation", "screen", "experiment", "details", "delete", "check-in"],
+      "kind": "nav-screen",
+      "wordBudget": 500,
+      "routeKey": "Experiment",
+      "destination": "AppDestination.Experiment"
+    },
+    {
+      "id": "nav.experiment-details.logic",
+      "path": "memory/nav/experiment-details/logic.md",
+      "tags": ["navigation", "logic", "experiment", "details", "delete", "check-in"],
+      "kind": "supporting-logic",
+      "wordBudget": 200,
+      "routeKey": null,
+      "destination": null
+    },
+    {
+      "id": "nav.experiment-editor.screen",
+      "path": "memory/nav/experiment-editor/screen.md",
+      "tags": ["navigation", "screen", "experiment", "editor", "metric"],
+      "kind": "nav-screen",
+      "wordBudget": 500,
+      "routeKey": "ExperimentEditor",
+      "destination": "AppDestination.ExperimentEditor"
+    },
+    {
+      "id": "nav.experiment-editor.logic",
+      "path": "memory/nav/experiment-editor/logic.md",
+      "tags": ["navigation", "logic", "experiment", "editor", "metric"],
+      "kind": "supporting-logic",
+      "wordBudget": 200,
+      "routeKey": null,
+      "destination": null
+    },
+    {
+      "id": "nav.daily-check-in.screen",
+      "path": "memory/nav/daily-check-in/screen.md",
+      "tags": ["navigation", "screen", "daily", "check-in", "outcome"],
+      "kind": "nav-screen",
+      "wordBudget": 500,
+      "routeKey": "DailyCheckIn",
+      "destination": "AppDestination.DailyCheckIn"
+    },
+    {
+      "id": "nav.daily-check-in.logic",
+      "path": "memory/nav/daily-check-in/logic.md",
+      "tags": ["navigation", "logic", "daily", "check-in", "outcome"],
+      "kind": "supporting-logic",
+      "wordBudget": 180,
+      "routeKey": null,
+      "destination": null
+    },
+    {
+      "id": "nav.settings.screen",
+      "path": "memory/nav/settings/screen.md",
+      "tags": ["navigation", "screen", "settings", "theme", "back"],
+      "kind": "nav-screen",
+      "wordBudget": 500,
+      "routeKey": "Settings",
+      "destination": "AppDestination.Settings"
+    },
+    {
+      "id": "nav.settings.logic",
+      "path": "memory/nav/settings/logic.md",
+      "tags": ["navigation", "logic", "settings", "theme", "back"],
+      "kind": "supporting-logic",
+      "wordBudget": 180,
+      "routeKey": null,
+      "destination": null
+    }
+  ]
+}

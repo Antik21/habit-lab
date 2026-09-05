@@ -12,6 +12,8 @@ Do not commit the actual local configuration. Do not replace nulls in the exampl
 
 Device selection is fail-closed for each platform requested by the user. Exactly one source must be non-null: `emulatorId` XOR `emulatorIdEnv` for requested Android, and `simulatorId` XOR `simulatorIdEnv` for requested iOS. An environment-key source must resolve to exactly one non-empty identifier. For a requested platform, reject both-set, neither-set, empty, unresolved, or ambiguous selection; do not apply precedence, discover a fallback target, or silently choose a connected device.
 
+Progressive-memory ledgers, receipts, correction observations, and self-patch attribution remain under the same ignored artifact root. Their history is local to this checkout; it is not a shared fact source or a device/credential inventory. The helper reads only its catalogued memory and explicitly named artifacts, and rejects symlink/path escapes.
+
 Do not read, use, or validate the configuration section for a platform the user did not request. Its presence or populated values must not block a single-platform run.
 
 ## Preflight inventory

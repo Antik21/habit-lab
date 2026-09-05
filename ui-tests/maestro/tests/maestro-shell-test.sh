@@ -19,3 +19,4 @@ if ! "$PYTHON_BIN" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3,
     exit 1
 fi
 "$PYTHON_BIN" "$TEST_DIR/autodev-gate-test.py"
+"$PYTHON_BIN" "$TEST_DIR/autodev-memory-test.py"

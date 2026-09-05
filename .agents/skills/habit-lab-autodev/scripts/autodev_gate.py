@@ -324,9 +324,11 @@ def atomic_write_at(directory_fd: int, name: str, data: bytes) -> None:
 
 
 def validate_manifest(value: Dict[str, Any], run_id: str) -> Dict[str, Any]:
-    exact_keys(value, ("schemaVersion", "runId", "taskId", "taskType", "sourceRevision",
-                       "requestedPlatforms", "blastRadius", "createdAt", "deviceLeases"),
-               "manifest")
+    legacy_fields = ("schemaVersion", "runId", "taskId", "taskType", "sourceRevision",
+                     "requestedPlatforms", "blastRadius", "createdAt", "deviceLeases")
+    current_fields = legacy_fields + ("memoryReceiptContract",)
+    if set(value) not in (set(legacy_fields), set(current_fields)):
+        raise GateError("manifest schema fields mismatch", EXIT_INTEGRITY)
     if type(value["schemaVersion"]) is not int or value["schemaVersion"] != SCHEMA_VERSION:
         raise GateError("manifest schemaVersion is invalid", EXIT_INTEGRITY)
     if value["runId"] != run_id:
@@ -350,6 +352,8 @@ def validate_manifest(value: Dict[str, Any], run_id: str) -> Dict[str, Any]:
     parse_timestamp(value["createdAt"], "manifest createdAt", EXIT_INTEGRITY)
     if value["deviceLeases"] != []:
         raise GateError("manifest deviceLeases must be the immutable acquired-none state", EXIT_INTEGRITY)
+    if "memoryReceiptContract" in value and value["memoryReceiptContract"] != 2:
+        raise GateError("manifest memory receipt contract is invalid", EXIT_INTEGRITY)
     return value
 
 
@@ -686,7 +690,7 @@ def init_run(args: argparse.Namespace, root: Path, roots: RuntimeRoots) -> Dict[
         "schemaVersion": SCHEMA_VERSION, "runId": args.run_id, "taskId": args.task_id,
         "taskType": args.task_type, "sourceRevision": source_revision,
         "requestedPlatforms": platforms, "blastRadius": [item.strip() for item in args.blast_radius],
-        "createdAt": now(), "deviceLeases": [],
+        "createdAt": now(), "deviceLeases": [], "memoryReceiptContract": 2,
     }
     exclusive_json_at(state_fd, "manifest.json", manifest)
     exclusive_json_at(state_fd, "manifest.anchor", {"manifestDigest": digest(manifest)})
@@ -1376,7 +1380,263 @@ def revalidate_terminal(run: Run) -> Optional[Dict[str, Any]]:
                 raise GateError("terminal receipt kind is invalid", EXIT_INTEGRITY)
             validate_artifact_record(item["artifact"], "receipt")
             revalidate_record(run.root, run, item["artifact"])
+            parse_receipt(run.root, run, item["artifact"]["path"], item["kind"],
+                          terminal["checkedRevision"], require_pass=terminal["outcome"] == "success")
     return terminal
+
+
+def anchored_digest(run: Run, parts: Sequence[str], label: str) -> str:
+    fd = open_anchored(run.repo_fd, parts)
+    try:
+        initial = os.fstat(fd)
+        if initial.st_size > MAX_SCAN_BYTES:
+            raise GateError("%s exceeds the bounded read size" % label, EXIT_GATE)
+        hasher = hashlib.sha256()
+        total = 0
+        while True:
+            chunk = os.read(fd, min(1024 * 1024, MAX_SCAN_BYTES - total + 1))
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > MAX_SCAN_BYTES:
+                raise GateError("%s grew while reading" % label, EXIT_INTEGRITY)
+            hasher.update(chunk)
+        final = os.fstat(fd)
+        if ((initial.st_dev, initial.st_ino, initial.st_size, initial.st_mtime_ns, initial.st_ctime_ns) !=
+                (final.st_dev, final.st_ino, final.st_size, final.st_mtime_ns, final.st_ctime_ns) or
+                total != final.st_size):
+            raise GateError("%s changed while reading" % label, EXIT_INTEGRITY)
+        return hasher.hexdigest()
+    finally:
+        os.close(fd)
+
+
+def git_tree_blob(root: Path, revision: str, relative: str, label: str) -> bytes:
+    candidate = Path(relative)
+    if (not re.fullmatch(r"[0-9a-f]{40,64}", revision) or candidate.is_absolute() or not candidate.parts or
+            ".." in candidate.parts or ":" in relative):
+        raise GateError("%s Git tree reference is unsafe" % label, EXIT_GATE)
+    tree_ref = "%s:%s" % (revision, candidate.as_posix())
+    exists = subprocess.run(["git", "cat-file", "-e", tree_ref], cwd=str(root), stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, check=False)
+    if exists.returncode:
+        raise GateError("%s is absent from the checked revision tree" % label, EXIT_GATE)
+    result = subprocess.run(["git", "show", tree_ref], cwd=str(root), stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, check=False)
+    if result.returncode or len(result.stdout) > MAX_SCAN_BYTES:
+        raise GateError("cannot safely read %s from the checked revision tree" % label, EXIT_GATE)
+    return result.stdout
+
+
+def memory_catalog_at_revision(root: Path, revision: str) -> Dict[str, str]:
+    data = git_tree_blob(root, revision, ".agents/skills/habit-lab-autodev/memory/catalog.json", "memory catalog")
+    try:
+        catalog = json.loads(data.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise GateError("current memory catalog is invalid: %s" % exc, EXIT_GATE)
+    exact_keys(catalog, ("schemaVersion", "entries"), "current memory catalog", EXIT_GATE)
+    if catalog["schemaVersion"] != SCHEMA_VERSION or not isinstance(catalog["entries"], list):
+        raise GateError("current memory catalog has an invalid schema", EXIT_GATE)
+    mapped: Dict[str, str] = {}
+    for item in catalog["entries"]:
+        exact_keys(item, ("id", "path", "tags", "kind", "wordBudget", "routeKey", "destination"),
+                   "current memory catalog entry", EXIT_GATE)
+        if (not isinstance(item["id"], str) or not ID_RE.fullmatch(item["id"]) or
+                not isinstance(item["path"], str) or not item["path"].startswith("memory/") or
+                ".." in Path(item["path"]).parts or item["id"] in mapped):
+            raise GateError("current memory catalog entry is invalid", EXIT_GATE)
+        mapped[item["id"]] = item["path"]
+    return mapped
+
+
+def validate_memory_file_records(root: Path, run: Run, checked_revision: str, label: str,
+                                 records: List[Dict[str, Any]], seen_paths: set) -> None:
+    """Bind every declared read/write to bytes that still exist at its proper scope."""
+    for item in records:
+        path = item["path"]
+        candidate = Path(path)
+        if (candidate.is_absolute() or not candidate.parts or ".." in candidate.parts or
+                "\\" in path or candidate.as_posix() != path):
+            raise GateError("memory ledger %s path is not a safe canonical relative path" % label, EXIT_GATE)
+        if path in seen_paths:
+            raise GateError("memory ledger repeats an exact read/write path", EXIT_GATE)
+        seen_paths.add(path)
+        artifact_prefixes = ((".autodev", "artifacts", run.run_id), ("build", "maestro", run.run_id))
+        if any(tuple(candidate.parts[:len(prefix)]) == prefix for prefix in artifact_prefixes):
+            actual = artifact_record(root, run, path)["sha256"]
+        else:
+            source = ".agents/skills/habit-lab-autodev/" + path if path.startswith("memory/") else path
+            actual = hashlib.sha256(git_tree_blob(root, checked_revision, source,
+                                                   "memory ledger %s source" % label)).hexdigest()
+        if actual != item["sha256"]:
+            raise GateError("memory ledger %s digest does not match recorded bytes" % label, EXIT_GATE)
+
+
+def validate_legacy_memory_receipt(receipt: Dict[str, Any]) -> None:
+    lint = receipt.get("lint")
+    if (not isinstance(receipt.get("read"), list) or not receipt["read"] or
+            not isinstance(receipt.get("written"), list) or not isinstance(lint, dict) or
+            lint.get("status") not in ("pass", "fail", "blocked", "skipped") or
+            type(lint.get("exitCode")) is not int or not isinstance(lint.get("command"), str) or
+            not lint["command"]):
+        raise GateError("legacy memory receipt is invalid", EXIT_GATE)
+    if receipt["status"] == "pass" and (lint["status"] != "pass" or lint["exitCode"] != 0):
+        raise GateError("legacy passing memory receipt lacks passing lint", EXIT_GATE)
+
+
+def validate_memory_receipt(root: Path, run: Run, receipt: Dict[str, Any],
+                            checked_revision: str) -> None:
+    exact_keys(receipt, ("schemaVersion", "kind", "sourceRevision", "timestamp", "status", "runId",
+                         "ledger", "ledgerSha256", "loaded", "lint", "structureChanged", "evalReceipt",
+                         "instructionPatchCount"), "memory receipt", EXIT_GATE)
+    if (receipt["runId"] != run.run_id or receipt["sourceRevision"] != checked_revision or
+            receipt["status"] != "pass" or not isinstance(receipt["ledger"], str) or
+            receipt["ledger"] != ".autodev/artifacts/%s/memory-ledger.json" % run.run_id or
+            not isinstance(receipt["ledgerSha256"], str) or
+            not re.fullmatch(r"[0-9a-f]{64}", receipt["ledgerSha256"])):
+        raise GateError("memory receipt is not bound to this checked run", EXIT_GATE)
+    ledger_record = artifact_record(root, run, receipt["ledger"])
+    if ledger_record["sha256"] != receipt["ledgerSha256"]:
+        raise GateError("memory receipt ledger digest does not match its artifact", EXIT_GATE)
+    try:
+        ledger = json.loads(read_recorded_bytes(run, ledger_record).decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise GateError("memory ledger JSON is invalid: %s" % exc, EXIT_GATE)
+    ledger_fields = ("schemaVersion", "runId", "createdAt", "updatedAt", "finalizedAt", "initialEntryIds",
+                     "plannedEntryIds", "loadedEntries", "reads", "writes", "durationSeconds", "builds",
+                     "iterations", "attempts", "outcome", "platforms", "flakySteps", "gateRun",
+                     "gateStatusSha256")
+    exact_keys(ledger, ledger_fields, "memory ledger", EXIT_GATE)
+    if (ledger["schemaVersion"] != SCHEMA_VERSION or ledger["runId"] != run.run_id or
+            ledger["outcome"] != "success" or not isinstance(ledger["loadedEntries"], list)):
+        raise GateError("memory ledger is not a finalized successful run ledger", EXIT_GATE)
+    for key in ("createdAt", "updatedAt", "finalizedAt"):
+        parse_timestamp(ledger.get(key), "memory ledger %s" % key, EXIT_GATE)
+    if ledger["initialEntryIds"] != ["memory.screen-navigation", "memory.lessons"]:
+        raise GateError("memory ledger initial memory contract is invalid", EXIT_GATE)
+    planned = ledger["plannedEntryIds"]
+    if (not isinstance(planned, list) or len(planned) > 3 or len(planned) != len(set(planned)) or
+            any(not isinstance(item, str) or not ID_RE.fullmatch(item) or
+                item in ledger["initialEntryIds"] for item in planned)):
+        raise GateError("memory ledger planned entries are invalid", EXIT_GATE)
+    for field in ("reads", "writes", "builds", "platforms", "flakySteps"):
+        if not isinstance(ledger[field], list):
+            raise GateError("memory ledger %s is invalid" % field, EXIT_GATE)
+    for field in ("durationSeconds", "iterations", "attempts"):
+        if type(ledger[field]) is not int or ledger[field] < 0:
+            raise GateError("memory ledger %s is invalid" % field, EXIT_GATE)
+    for field in ("reads", "writes"):
+        seen = set()
+        for item in ledger[field]:
+            exact_keys(item, ("path", "sha256"), "memory ledger %s record" % field, EXIT_GATE)
+            if (not isinstance(item["path"], str) or not item["path"] or
+                    not isinstance(item["sha256"], str) or not re.fullmatch(r"[0-9a-f]{64}", item["sha256"]) or
+                    item["path"] in seen):
+                raise GateError("memory ledger %s records are invalid" % field, EXIT_GATE)
+            seen.add(item["path"])
+    read_write_paths = set()
+    validate_memory_file_records(root, run, checked_revision, "read", ledger["reads"], read_write_paths)
+    validate_memory_file_records(root, run, checked_revision, "write", ledger["writes"], read_write_paths)
+    build_names = set()
+    for item in ledger["builds"]:
+        exact_keys(item, ("name", "status"), "memory ledger build", EXIT_GATE)
+        if (not isinstance(item["name"], str) or not ID_RE.fullmatch(item["name"]) or
+                item["status"] not in ("pass", "fail", "skipped") or item["name"] in build_names):
+            raise GateError("memory ledger builds are invalid", EXIT_GATE)
+        build_names.add(item["name"])
+    if (ledger["platforms"] != sorted(ledger["platforms"]) or len(ledger["platforms"]) != len(set(ledger["platforms"])) or
+            any(item not in PLATFORMS for item in ledger["platforms"]) or
+            ledger["flakySteps"] != sorted(ledger["flakySteps"]) or len(ledger["flakySteps"]) != len(set(ledger["flakySteps"])) or
+            any(not isinstance(item, str) or not item for item in ledger["flakySteps"])):
+        raise GateError("memory ledger platforms or flaky steps are invalid", EXIT_GATE)
+    if ledger["gateRun"] is not None:
+        validate_run_id(ledger["gateRun"])
+        if ledger["gateRun"] != run.run_id:
+            raise GateError("memory ledger gate run escaped this run", EXIT_GATE)
+    elif ledger["gateStatusSha256"] is not None:
+        raise GateError("memory ledger gate status has no matching gate run", EXIT_GATE)
+    if ledger["gateStatusSha256"] is not None and (not isinstance(ledger["gateStatusSha256"], str) or
+                                                    not re.fullmatch(r"[0-9a-f]{64}", ledger["gateStatusSha256"])):
+        raise GateError("memory ledger gate status digest is invalid", EXIT_GATE)
+    catalog = memory_catalog_at_revision(root, checked_revision)
+    actual_loaded = []
+    for item in ledger["loadedEntries"]:
+        exact_keys(item, ("entryId", "path", "sha256", "loadedAt"), "memory ledger loaded entry", EXIT_GATE)
+        if (not isinstance(item["entryId"], str) or not ID_RE.fullmatch(item["entryId"]) or
+                not isinstance(item["path"], str) or not item["path"].startswith("memory/") or
+                not isinstance(item["sha256"], str) or not re.fullmatch(r"[0-9a-f]{64}", item["sha256"])):
+            raise GateError("memory ledger loaded entry is invalid", EXIT_GATE)
+        parse_timestamp(item["loadedAt"], "memory ledger loaded entry", EXIT_GATE)
+        if catalog.get(item["entryId"]) != item["path"]:
+            raise GateError("memory ledger entry does not match the current catalog", EXIT_GATE)
+        source_relative = ".agents/skills/habit-lab-autodev/" + item["path"]
+        if hashlib.sha256(git_tree_blob(root, checked_revision, source_relative, "memory entry")).hexdigest() != item["sha256"]:
+            raise GateError("memory ledger entry does not match checked tracked memory bytes", EXIT_GATE)
+        actual_loaded.append({"entryId": item["entryId"], "path": item["path"], "sha256": item["sha256"]})
+    loaded_ids = {item["entryId"] for item in actual_loaded}
+    if len(loaded_ids) != len(actual_loaded) or not set(ledger["initialEntryIds"]).issubset(loaded_ids):
+        raise GateError("memory ledger has duplicate loaded entries", EXIT_GATE)
+    non_initial_loaded = loaded_ids - set(ledger["initialEntryIds"])
+    if len(non_initial_loaded) > 3 or not non_initial_loaded.issubset(set(planned)):
+        raise GateError("memory ledger loaded entries escape its plan", EXIT_GATE)
+    supplied_loaded = receipt["loaded"]
+    if not isinstance(supplied_loaded, list):
+        raise GateError("memory receipt loaded entries are invalid", EXIT_GATE)
+    for item in supplied_loaded:
+        exact_keys(item, ("entryId", "path", "sha256"), "memory receipt loaded entry", EXIT_GATE)
+    if supplied_loaded != sorted(actual_loaded, key=lambda item: item["entryId"]):
+        raise GateError("memory receipt loaded paths and digests do not match its ledger", EXIT_GATE)
+    lint = receipt["lint"]
+    exact_keys(lint, ("command", "status", "exitCode"), "memory receipt lint", EXIT_GATE)
+    if (lint["command"] != "python3 .agents/skills/habit-lab-autodev/scripts/autodev_memory.py lint" or
+            lint["status"] != "pass" or lint["exitCode"] != 0):
+        raise GateError("memory receipt lint did not pass exactly", EXIT_GATE)
+    if type(receipt["structureChanged"]) is not bool or type(receipt["instructionPatchCount"]) is not int or not 0 <= receipt["instructionPatchCount"] <= 1:
+        raise GateError("memory receipt structure fields are invalid", EXIT_GATE)
+    structural_result = subprocess.run(["git", "diff", "--name-only", run.manifest["sourceRevision"], checked_revision, "--"],
+                                       cwd=str(root), text=True, stdout=subprocess.PIPE,
+                                       stderr=subprocess.PIPE, check=False)
+    if structural_result.returncode:
+        raise GateError("cannot determine structural instruction changes", EXIT_GATE)
+    changed = [line for line in structural_result.stdout.splitlines() if line]
+    instruction_prefix = ".agents/skills/habit-lab-autodev/memory/instructions/"
+    instruction_paths = sorted(path for path in changed if path.startswith(instruction_prefix))
+    if receipt["structureChanged"] != bool(instruction_paths) or receipt["instructionPatchCount"] != len(instruction_paths):
+        raise GateError("memory receipt structure declaration does not match changed paths", EXIT_GATE)
+    if instruction_paths:
+        commit_paths_result = subprocess.run(["git", "diff-tree", "--no-commit-id", "--name-only", "-r", checked_revision],
+                                             cwd=str(root), text=True, stdout=subprocess.PIPE,
+                                             stderr=subprocess.PIPE, check=False)
+        commit_paths = sorted(line for line in commit_paths_result.stdout.splitlines() if line)
+        if commit_paths_result.returncode or commit_paths != instruction_paths:
+            raise GateError("structural instruction change is not an isolated commit", EXIT_GATE)
+    change_digest = digest({"paths": instruction_paths})
+    evaluation = receipt["evalReceipt"]
+    if receipt["structureChanged"]:
+        exact_keys(evaluation, ("path", "sha256", "status"), "memory receipt evaluation", EXIT_GATE)
+        if (not isinstance(evaluation["path"], str) or not isinstance(evaluation["sha256"], str) or
+                not re.fullmatch(r"[0-9a-f]{64}", evaluation["sha256"]) or evaluation["status"] != "pass"):
+            raise GateError("memory receipt evaluation is invalid", EXIT_GATE)
+        evaluation_record = artifact_record(root, run, evaluation["path"])
+        if evaluation_record["sha256"] != evaluation["sha256"]:
+            raise GateError("memory receipt evaluation digest does not match its artifact", EXIT_GATE)
+        try:
+            evaluation_value = json.loads(read_recorded_bytes(run, evaluation_record).decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise GateError("memory evaluation receipt is invalid: %s" % exc, EXIT_GATE)
+        exact_keys(evaluation_value, ("schemaVersion", "kind", "runId", "sourceRevision", "status", "command",
+                                      "exitCode", "checkedChangeDigest", "regressionResult"),
+                   "memory evaluation receipt", EXIT_GATE)
+        if (evaluation_value["schemaVersion"] != SCHEMA_VERSION or
+                evaluation_value["kind"] != "autodev-memory-eval" or
+                evaluation_value["runId"] != run.run_id or evaluation_value["sourceRevision"] != checked_revision or
+                evaluation_value["status"] != "pass" or not isinstance(evaluation_value["command"], str) or
+                not evaluation_value["command"] or evaluation_value["exitCode"] != 0 or
+                evaluation_value["checkedChangeDigest"] != change_digest or
+                evaluation_value["regressionResult"] != "pass"):
+            raise GateError("memory evaluation receipt did not pass", EXIT_GATE)
+    elif evaluation is not None:
+        raise GateError("non-structural memory receipt cannot carry an evaluation receipt", EXIT_GATE)
 
 
 def parse_receipt(root: Path, run: Run, path: str, expected_kind: str,
@@ -1411,15 +1671,10 @@ def parse_receipt(root: Path, run: Run, path: str, expected_kind: str,
             raise GateError("%s receipt requires an explicit platforms array" % expected_kind, EXIT_GATE)
         parse_platforms(receipt["platforms"])
     elif expected_kind == "memory":
-        lint = receipt.get("lint")
-        if not isinstance(receipt.get("read"), list) or not receipt["read"] or not isinstance(receipt.get("written"), list):
-            raise GateError("memory receipt requires read and written arrays", EXIT_GATE)
-        if (not isinstance(lint, dict) or lint.get("status") not in statuses or
-                type(lint.get("exitCode")) is not int or
-                not isinstance(lint.get("command"), str) or not lint["command"]):
-            raise GateError("memory receipt requires a structured lint result", EXIT_GATE)
-        if receipt["status"] == "pass" and (lint["status"] != "pass" or lint["exitCode"] != 0):
-            raise GateError("passing memory receipt requires a passing lint result", EXIT_GATE)
+        if run.manifest.get("memoryReceiptContract") == 2:
+            validate_memory_receipt(root, run, receipt, checked_revision)
+        else:
+            validate_legacy_memory_receipt(receipt)
     elif expected_kind == "review":
         reviewed = receipt.get("reviewedRevision")
         if not isinstance(reviewed, str) or reviewed.lower() != checked_revision:
@@ -1586,9 +1841,19 @@ def report_markdown(run: Run, outcome: str, reason: Optional[str], derived: Dict
     memory = receipts.get("memory", [])
     review = receipts.get("review", [])
     cleanup = receipts.get("cleanup", [])
-    lines.append("- Memory: %s" % ("%s; %s read, %s written; lint %s" % (
-        memory[0]["status"], len(memory[0]["read"]), len(memory[0]["written"]),
-        memory[0]["lint"]["status"]) if memory else "not supplied"))
+    if memory:
+        memory_receipt = memory[0]
+        if "loaded" in memory_receipt:
+            memory_summary = "%s; %s loaded; lint %s; instruction patches %s" % (
+                memory_receipt["status"], len(memory_receipt["loaded"]),
+                memory_receipt["lint"]["status"], memory_receipt["instructionPatchCount"])
+        else:
+            memory_summary = "%s; %s read, %s written; lint %s" % (
+                memory_receipt["status"], len(memory_receipt["read"]),
+                len(memory_receipt["written"]), memory_receipt["lint"]["status"])
+    else:
+        memory_summary = "not supplied"
+    lines.append("- Memory: %s" % memory_summary)
     lines.append("- Independent review: %s" % ("%s; %s unresolved justified findings" % (
         review[0]["status"], review[0]["unresolvedJustifiedFindings"]) if review else "not supplied"))
     lines.append("- Cleanup: %s" % ("%s; %s residual scratch entries, %s hook entries, scan %s" % (

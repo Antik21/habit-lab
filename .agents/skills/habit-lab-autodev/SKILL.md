@@ -10,7 +10,7 @@ Use this skill only for the explicit end-to-end request described above. User au
 ## Start here
 
 1. Read the repository [request router](../../../AGENTS.md), [documentation governance](../../docs/00-routing.md), [toolchain catalog](../../docs/01-stack-toolchain.md), and [verification policy](../../docs/07-testing-verification.md).
-2. Read [setup and environment](references/setup-and-env.md), [autonomous loop](references/autonomous-loop.md), [UI automation](references/ui-automation.md), [self-verification](references/self-verification.md), and the [frozen checklist gate](references/checklist-gate.md).
+2. Read [setup and environment](references/setup-and-env.md), [autonomous loop](references/autonomous-loop.md), [UI automation](references/ui-automation.md), [self-verification](references/self-verification.md), [progressive memory](references/self-learning.md), and the [frozen checklist gate](references/checklist-gate.md).
 3. Classify the task and read exactly one playbook: [bug](references/task-types/bug.md), [feature](references/task-types/feature.md), or [performance](references/task-types/perf.md). If none applies, stop before editing with `blocked` and identify the unsupported task type; there is no generic fallback.
 4. Select each requested platform and read its playbook: [Android](references/platforms/android.md) and/or [iOS](references/platforms/ios.md).
 5. Follow every matching root route for all affected boundaries: screen, route, dialog, repository-room, Android adapter, iOS adapter, dependency-toolchain, or tests-verification. Read only the union of policies linked by those routes.
@@ -24,5 +24,7 @@ Use this skill only for the explicit end-to-end request described above. User au
 - Freeze the task checklist before implementation. Never weaken the checklist, skill, evaluator, or gate to make a run pass. Clean scratch resources when the run ends.
 
 Use [screen navigation](memory/screen-navigation.md) only as an index. The reviewed executable routes live in `flows/`; evidence-backed navigation nodes must follow the [navigation schema](memory/nav/_SCHEMA.md). Admit reusable knowledge to [lessons](memory/lessons.md) only under its verification contract.
+
+Use progressive memory only through its reviewed JSON helper and receipt. Post-terminal correction curation or an isolated instruction-record commit remains separate from the frozen run; it cannot patch the skill, gate, evaluator, flows, or checklist.
 
 Report exactly one terminal outcome: `success`, `blocked`, `failed`, or `partial`. `success` requires both preserved evidence and a passing gate. Stabilization and merge require a separate explicit command.

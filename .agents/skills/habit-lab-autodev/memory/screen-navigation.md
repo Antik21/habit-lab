@@ -12,5 +12,6 @@ This is a compact discovery index, not proof of current reachability. Canonical 
 | Existing cross-platform reference contour | [`reference-screens.yaml`](../../../../ui-tests/maestro/flows/reference-screens.yaml) | The sole runner-owned scenario composes the reviewed [skill-owned flows](../flows/) |
 | Reusable route records | [`flows/`](../flows/) | Narrow DEN-18 paths with semantic start/end assertions and linked admitted nodes |
 | Platform system gestures | [`flows/platform/`](../../../../ui-tests/maestro/flows/platform/) and [ADR 0003](../../../../docs/adr/0003-maestro-cross-platform-ui-automation.md) | Only the governed system gesture exception |
+| Progressive selection and receipt | [self-learning reference](../references/self-learning.md) and [`catalog.json`](catalog.json) | Local-history discovery only; ledger/receipt bind actual reads |
 
 Before navigating, verify IDs against current production source. Neither a flow nor a memory record overrides the code contract, current app state, or frozen task acceptance. Broken or missing IDs follow [UI automation](../references/ui-automation.md); they never authorize locale-, value-, position-, or coordinate-based app selectors.
