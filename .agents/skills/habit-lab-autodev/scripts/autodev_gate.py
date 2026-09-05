@@ -62,14 +62,12 @@ def now() -> str:
 
 
 def parse_timestamp(value: Any, label: str, code: int = EXIT_GATE) -> dt.datetime:
-    if not isinstance(value, str):
-        raise GateError("%s must be an ISO-8601 timestamp" % label, code)
+    if not isinstance(value, str) or not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z", value):
+        raise GateError("%s must use UTC YYYY-MM-DDTHH:MM:SSZ" % label, code)
     try:
-        parsed = dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+        parsed = dt.datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=dt.timezone.utc)
     except ValueError:
-        raise GateError("%s must be an ISO-8601 timestamp" % label, code)
-    if parsed.tzinfo is None:
-        raise GateError("%s timestamp must include a timezone" % label, code)
+        raise GateError("%s must use UTC YYYY-MM-DDTHH:MM:SSZ" % label, code)
     return parsed
 
 
@@ -442,8 +440,9 @@ class Run:
 
     def __enter__(self) -> "Run":
         try:
-            self.lock_fd = os.open(".lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW,
-                                   0o600, dir_fd=self.state_fd)
+            self.lock_fd = os.open(".lock", os.O_RDWR | os.O_NOFOLLOW, dir_fd=self.state_fd)
+        except FileNotFoundError:
+            raise GateError("run lock was deleted", EXIT_INTEGRITY)
         except OSError:
             raise GateError("cannot open run lock", EXIT_IO)
         lock_info = os.fstat(self.lock_fd)
@@ -655,6 +654,9 @@ def init_run(args: argparse.Namespace, root: Path, roots: RuntimeRoots) -> Dict[
         "artifactDevice": artifact_info.st_dev, "artifactInode": artifact_info.st_ino,
     }
     exclusive_json_at(state_fd, "owner.json", owner)
+    lock_fd = os.open(".lock", os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                      0o600, dir_fd=state_fd)
+    os.close(lock_fd)
     os.mkdir("anchors", 0o700, dir_fd=state_fd)
     anchors_fd = open_child_dir(state_fd, "anchors")
     for folder in ("criteria", "late-regressions", "attempts"):
@@ -870,9 +872,16 @@ def validate_evidence(evidence_type: str, data: bytes, criterion_id: str, platfo
     if evidence_type == "metric":
         expected = ("schemaVersion", "kind", "sourceRevision", "timestamp", "platform",
                     "criterionId", "result", "phase", "scenarioFingerprint", "metricName",
-                    "value", "unit")
+                    "value", "unit", "instrumentation", "aggregation", "sampleCount",
+                    "threshold")
         exact_keys(value, expected, "metric evidence", EXIT_VALIDATION)
         numeric = value["value"]
+        threshold = value["threshold"]
+        if not isinstance(threshold, dict):
+            raise GateError("metric threshold must be an exact object")
+        exact_keys(threshold, ("direction", "minimumDelta", "deltaUnit"),
+                   "metric threshold", EXIT_VALIDATION)
+        minimum_delta = threshold["minimumDelta"]
         if (type(value["schemaVersion"]) is not int or value["schemaVersion"] != SCHEMA_VERSION or
                 value["kind"] != "metric-evidence" or value["sourceRevision"] != source_revision or
                 value["platform"] != platform or value["criterionId"] != criterion_id or
@@ -880,11 +889,20 @@ def validate_evidence(evidence_type: str, data: bytes, criterion_id: str, platfo
                 value["scenarioFingerprint"] != fingerprint or
                 not isinstance(value["metricName"], str) or not value["metricName"] or
                 type(numeric) not in (int, float) or not math.isfinite(numeric) or
-                not isinstance(value["unit"], str) or not value["unit"]):
+                not isinstance(value["unit"], str) or not value["unit"] or
+                not isinstance(value["instrumentation"], str) or not value["instrumentation"] or
+                not isinstance(value["aggregation"], str) or not value["aggregation"] or
+                type(value["sampleCount"]) is not int or value["sampleCount"] < 1 or
+                threshold["direction"] not in ("increase", "decrease") or
+                type(minimum_delta) not in (int, float) or not math.isfinite(minimum_delta) or
+                minimum_delta < 0 or threshold["deltaUnit"] not in ("absolute", "percent")):
             raise GateError("metric evidence fields do not match the attempt")
         parse_timestamp(value["timestamp"], "metric evidence")
         return {"format": "metric", "metricName": value["metricName"],
-                "value": numeric, "unit": value["unit"], "scenarioFingerprint": fingerprint}
+                "value": numeric, "unit": value["unit"], "scenarioFingerprint": fingerprint,
+                "instrumentation": value["instrumentation"],
+                "aggregation": value["aggregation"], "sampleCount": value["sampleCount"],
+                "threshold": threshold}
     raise GateError("unsupported evidence type")
 
 
@@ -902,6 +920,52 @@ def validate_reread(data: bytes, criterion_id: str, platform: str, hypothesis: s
         raise GateError("reread reference fields do not match the attempt")
     parse_timestamp(value["timestamp"], "reread reference")
     return {"format": "reread-reference", "reference": value["reference"]}
+
+
+def computed_perf_metadata(baseline: Dict[str, Any], candidate: Dict[str, Any],
+                           baseline_sha256: str) -> Dict[str, Any]:
+    comparable = ("metricName", "unit", "scenarioFingerprint", "instrumentation",
+                  "aggregation", "sampleCount", "threshold")
+    if any(baseline.get(field) != candidate.get(field) for field in comparable):
+        raise GateError("performance baseline and candidate contracts are not identical")
+    threshold = candidate["threshold"]
+    baseline_value = baseline["value"]
+    candidate_value = candidate["value"]
+    raw_improvement = (candidate_value - baseline_value if threshold["direction"] == "increase"
+                       else baseline_value - candidate_value)
+    if not math.isfinite(raw_improvement):
+        raise GateError("computed performance delta is not finite")
+    if threshold["deltaUnit"] == "percent":
+        if baseline_value == 0:
+            raise GateError("percent performance delta is undefined for a zero baseline")
+        computed_delta = raw_improvement / abs(baseline_value) * 100.0
+    else:
+        computed_delta = raw_improvement
+    if not math.isfinite(computed_delta):
+        raise GateError("computed performance delta is not finite")
+    computed_result = "pass" if computed_delta >= threshold["minimumDelta"] else "fail"
+    enriched = dict(candidate)
+    enriched.update({
+        "baselineValue": baseline_value, "candidateValue": candidate_value,
+        "computedDelta": computed_delta, "computedResult": computed_result,
+        "baselineEvidenceSha256": baseline_sha256,
+    })
+    return enriched
+
+
+def require_later_revision(root: Path, initial: str, candidate: str, label: str,
+                           code: int = EXIT_VALIDATION) -> None:
+    if candidate == initial:
+        raise GateError("%s must use a later revision" % label, code)
+    result = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", initial, candidate], cwd=str(root),
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
+    )
+    if result.returncode == 1:
+        raise GateError("%s revision is not descended from the immutable initial revision" % label,
+                        code)
+    if result.returncode != 0:
+        raise GateError("cannot verify source revision ancestry", EXIT_IO)
 
 
 def find_criterion(run: Run, criterion_id: str) -> Dict[str, Any]:
@@ -926,6 +990,7 @@ def verify_freeze(run: Run) -> Tuple[Dict[str, Any], List[Dict[str, Any]], List[
 
 
 def record_attempt(args: argparse.Namespace, run: Run, result: str) -> Dict[str, Any]:
+    derive(run, require_frozen=True)
     frozen, _, _ = verify_freeze(run)
     criterion = find_criterion(run, args.criterion)
     if args.platform not in criterion["requiredPlatforms"]:
@@ -977,6 +1042,9 @@ def record_attempt(args: argparse.Namespace, run: Run, result: str) -> Dict[str,
             raise GateError("bug fix pass requires a prior failing baseline for the same scenario key")
         if result == "pass" and any(event["evidence"]["path"] == evidence["path"] for event in baseline):
             raise GateError("fixed evidence must be separate from baseline evidence")
+        if result == "pass":
+            require_later_revision(run.root, manifest["sourceRevision"], source_revision,
+                                   "bug fixed evidence")
     elif manifest["taskType"] == "perf":
         if not fingerprint:
             raise GateError("performance attempts require --scenario-fingerprint")
@@ -987,10 +1055,23 @@ def record_attempt(args: argparse.Namespace, run: Run, result: str) -> Dict[str,
                 raise GateError("performance baseline recording uses pass --phase baseline")
             if source_revision != manifest["sourceRevision"]:
                 raise GateError("performance baseline must use the immutable initial source revision")
+            if baselines:
+                raise GateError("performance baseline is immutable and already recorded")
         elif phase not in ("candidate", "repeat") or not baselines:
             raise GateError("performance result requires baseline plus candidate/repeat with the same fingerprint")
+        else:
+            if len(baselines) != 1:
+                raise GateError("performance comparison requires exactly one baseline", EXIT_INTEGRITY)
+            require_later_revision(run.root, manifest["sourceRevision"], source_revision,
+                                   "performance candidate/repeat")
+            evidence_metadata = computed_perf_metadata(
+                baselines[0]["evidenceMetadata"], evidence_metadata,
+                baselines[0]["evidence"]["sha256"])
+            if result != evidence_metadata["computedResult"]:
+                raise GateError("performance result does not match the computed threshold outcome")
     elif phase != "observation":
         raise GateError("non bug/performance attempts must use --phase observation")
+    derive(run, require_frozen=True)
     failure_number = len(failures) + (1 if result == "fail" else 0)
     event = run.append_event("attempts", {
         "criterionId": args.criterion, "platform": args.platform, "result": result,
@@ -1056,6 +1137,8 @@ def derive(run: Run, require_frozen: bool = False) -> Dict[str, Any]:
         if late:
             raise GateError("late regressions exist without a freeze", EXIT_INTEGRITY)
     attempts = run.events("attempts")
+    manifest = run.manifest
+    validated_attempts: List[Dict[str, Any]] = []
     for event in attempts:
         criterion = next((item for item in core + late
                           if item["criterionId"] == event["criterionId"]), None)
@@ -1068,6 +1151,53 @@ def derive(run: Run, require_frozen: bool = False) -> Dict[str, Any]:
             event["evidenceType"], read_recorded_bytes(run, event["evidence"]),
             event["criterionId"], event["platform"], event["result"],
             event["sourceRevision"], event["phase"], event.get("scenarioFingerprint"))
+        if manifest["taskType"] == "bug" and criterion["kind"] == "repro":
+            scenario = event.get("scenarioKey")
+            if not scenario:
+                raise GateError("bug reproduction attempt lacks a scenario key", EXIT_INTEGRITY)
+            if event["phase"] == "baseline":
+                if (event["result"] != "fail" or
+                        event["sourceRevision"] != manifest["sourceRevision"]):
+                    raise GateError("bug baseline provenance is invalid", EXIT_INTEGRITY)
+            elif event["phase"] == "fixed":
+                baselines = [prior for prior in validated_attempts
+                             if prior["criterionId"] == event["criterionId"] and
+                             prior["platform"] == event["platform"] and
+                             prior["phase"] == "baseline" and prior["result"] == "fail" and
+                             prior.get("scenarioKey") == scenario]
+                if not baselines or event["result"] != "pass":
+                    raise GateError("bug fixed evidence lacks its failing baseline", EXIT_INTEGRITY)
+                if any(prior["evidence"]["path"] == event["evidence"]["path"]
+                       for prior in baselines):
+                    raise GateError("bug fixed evidence reused its baseline artifact", EXIT_INTEGRITY)
+                require_later_revision(run.root, manifest["sourceRevision"],
+                                       event["sourceRevision"], "bug fixed evidence",
+                                       EXIT_INTEGRITY)
+            else:
+                raise GateError("bug reproduction attempt phase is invalid", EXIT_INTEGRITY)
+        elif manifest["taskType"] == "perf":
+            if event["phase"] == "baseline":
+                if event["sourceRevision"] != manifest["sourceRevision"]:
+                    raise GateError("performance baseline revision is not the immutable initial revision",
+                                    EXIT_INTEGRITY)
+            elif event["phase"] in ("candidate", "repeat"):
+                baselines = [prior for prior in validated_attempts
+                             if prior["criterionId"] == event["criterionId"] and
+                             prior["platform"] == event["platform"] and
+                             prior["phase"] == "baseline" and
+                             prior.get("scenarioFingerprint") == event.get("scenarioFingerprint")]
+                if len(baselines) != 1:
+                    raise GateError("performance comparison baseline is missing or ambiguous",
+                                    EXIT_INTEGRITY)
+                require_later_revision(run.root, manifest["sourceRevision"],
+                                       event["sourceRevision"], "performance candidate/repeat",
+                                       EXIT_INTEGRITY)
+                metadata = computed_perf_metadata(
+                    baselines[0]["evidenceMetadata"], metadata,
+                    baselines[0]["evidence"]["sha256"])
+                if event["result"] != metadata["computedResult"]:
+                    raise GateError("stored performance result differs from computed outcome",
+                                    EXIT_INTEGRITY)
         if metadata != event["evidenceMetadata"]:
             raise GateError("recorded evidence metadata was mutated", EXIT_INTEGRITY)
         if event.get("rereadReference"):
@@ -1078,10 +1208,10 @@ def derive(run: Run, require_frozen: bool = False) -> Dict[str, Any]:
                 event["sourceRevision"])
             if metadata != event.get("rereadMetadata"):
                 raise GateError("recorded reread metadata was mutated", EXIT_INTEGRITY)
+        validated_attempts.append(event)
     matrix = []
     passing = True
     terminal_partial = False
-    manifest = run.manifest
     for criterion in core + late:
         for platform in criterion["requiredPlatforms"]:
             relevant = [event for event in attempts if event["criterionId"] == criterion["criterionId"]
@@ -1262,8 +1392,8 @@ def bounded_scan(run: Run, paths: Iterable[str]) -> Dict[str, Any]:
             raise GateError("scan input is outside the repository: %s" % raw, EXIT_GATE)
         fd = open_anchored(run.repo_fd, candidate.parts)
         try:
-            size = os.fstat(fd).st_size
-            if size > MAX_SCAN_BYTES:
+            initial = os.fstat(fd)
+            if initial.st_size > MAX_SCAN_BYTES:
                 raise GateError("scan input exceeds the documented 64 MiB bound: %s" % raw, EXIT_GATE)
             scanned = 0
             tail = b""
@@ -1281,8 +1411,15 @@ def bounded_scan(run: Run, paths: Iterable[str]) -> Dict[str, Any]:
                 hook_found = hook_found or bool(hook.search(window))
                 secret_found = secret_found or any(pattern.search(window) for pattern in secrets)
                 tail = window[-512:]
+            final = os.fstat(fd)
+            if ((initial.st_dev, initial.st_ino, initial.st_size, initial.st_mtime_ns,
+                 initial.st_ctime_ns) !=
+                    (final.st_dev, final.st_ino, final.st_size, final.st_mtime_ns,
+                     final.st_ctime_ns) or scanned != final.st_size):
+                raise GateError("scan input changed while reading: %s" % raw, EXIT_INTEGRITY)
         finally:
             os.close(fd)
+        verify_artifact_path_identity(run, candidate.parts, final)
         checked.append(raw)
         if hook_found:
             findings.append({"path": raw, "type": "forbidden-autodev-hook"})
@@ -1321,6 +1458,17 @@ def report_markdown(run: Run, outcome: str, reason: Optional[str], derived: Dict
         lines.append("- %s/%s: %s (%s), evidence `%s`, hypothesis: %s" % (
             event["criterionId"], event["platform"], event["result"], event["phase"],
             event["evidence"]["path"], event.get("hypothesis") or "none"))
+        if event["evidenceType"] == "metric":
+            metadata = event["evidenceMetadata"]
+            comparison = ("; computed %s delta %s %s against minimum %s (%s)" % (
+                metadata["threshold"]["direction"],
+                metadata["computedDelta"], metadata["threshold"]["deltaUnit"],
+                metadata["threshold"]["minimumDelta"], metadata["computedResult"])
+                if "computedDelta" in metadata else "; immutable baseline")
+            lines.append("  - Metric: %s=%s %s, %s/%s, samples=%s%s" % (
+                metadata["metricName"], metadata["value"], metadata["unit"],
+                metadata["instrumentation"], metadata["aggregation"],
+                metadata["sampleCount"], comparison))
     lines.extend(["", "## Builds and tests", ""])
     for kind in ("build", "test"):
         values = receipts.get(kind, [])
@@ -1340,7 +1488,7 @@ def report_markdown(run: Run, outcome: str, reason: Optional[str], derived: Dict
         cleanup[0]["status"], len(cleanup[0]["residualScratch"]),
         len(cleanup[0]["forbiddenHooks"]), cleanup[0]["secretScan"]["status"])
         if cleanup else "not supplied"))
-    lines.append("- Device leases: %s" % ("none acquired" if manifest["deviceLeases"] == [] else "outstanding"))
+    lines.append("- Device leases: none acquired (immutable manifest state)")
     lines.extend(["", "## Limitations", ""])
     if scan:
         lines.append("- Secret/hook scan was deterministic and bounded to %s; it is not a universal secret scanner." % scan["coverage"])
@@ -1413,8 +1561,6 @@ def finish(args: argparse.Namespace, run: Run) -> Dict[str, Any]:
         if late and parse_timestamp(review["timestamp"], "review receipt") <= parse_timestamp(
                 late[-1]["createdAt"], "late regression"):
             raise GateError("independent review timestamp predates the latest late regression", EXIT_GATE)
-        if run.manifest.get("deviceLeases") != []:
-            raise GateError("outstanding device lease blocks success", EXIT_GATE)
         state_names = set(os.listdir(run.state_fd))
         if "scratch" in state_names:
             scratch_fd = open_child_dir(run.state_fd, "scratch")
@@ -1510,6 +1656,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 payload = init_run(args, root, roots)
             else:
                 with Run(root, roots, args.run_id) as run:
+                    _ = run.manifest
+                    terminal = revalidate_terminal(run)
+                    if terminal and args.command != "status":
+                        raise GateError("terminal run is immutable; only status is permitted", EXIT_GATE)
                     if args.command == "add":
                         payload = add_criterion(args, run)
                     elif args.command == "freeze":
