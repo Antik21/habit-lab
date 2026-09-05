@@ -33,7 +33,7 @@ jobs:
       - name: Set up Android SDK required by the shared module configuration
         uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
       - name: Install the Android compile SDK
-        run: sdkmanager --channel=3 --install "platforms;android-37" "build-tools;36.0.0"
+        run: sdkmanager --channel=3 --install "platforms;android-37.0" "build-tools;36.0.0"
       - name: Run shared checks on the iOS simulator
         run: ./gradlew :shared:check :shared:iosSimulatorArm64Test --stacktrace
 
@@ -56,7 +56,7 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
       - name: Install the Android compile SDK
-        run: sdkmanager --channel=3 --install "platforms;android-37" "build-tools;36.0.0"
+        run: sdkmanager --channel=3 --install "platforms;android-37.0" "build-tools;36.0.0"
       - name: Run common tests on one Android emulator
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
