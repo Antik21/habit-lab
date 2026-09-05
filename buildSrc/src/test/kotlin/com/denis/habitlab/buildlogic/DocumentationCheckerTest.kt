@@ -231,6 +231,41 @@ class DocumentationCheckerTest {
         }
 
     @Test
+    fun `escaped backticks leave HTML tags outside code spans while even backslashes allow code spans`() =
+        withFixture { fixture ->
+            val sources = fixture.baselineSources().apply {
+                this["README.md"] = """
+                    [escaped valid](docs/escaped-backtick-headings.md#escaped-prefix-suffix)
+                    [escaped invalid](docs/escaped-backtick-headings.md#escaped-prefix-tag-suffix)
+                    [even backslashes](docs/escaped-backtick-headings.md#even-tag-suffix)
+                """.trimIndent()
+                this["docs/escaped-backtick-headings.md"] = """
+                    # Escaped Prefix \`<Tag>\` Suffix
+                    # Even \\`<Tag>` Suffix
+                """.trimIndent()
+            }
+
+            assertEquals(
+                listOf(
+                    "README.md:2: Markdown anchor does not exist: " +
+                        "docs/escaped-backtick-headings.md#escaped-prefix-tag-suffix",
+                ),
+                fixture.check(sources),
+            )
+        }
+
+    @Test
+    fun `backslash before a code span closer does not escape the closer`() = withFixture { fixture ->
+        val sources = fixture.baselineSources().apply {
+            this["README.md"] =
+                "[escaped closer](docs/escaped-closer-heading.md#prefix-tag-suffix)"
+            this["docs/escaped-closer-heading.md"] = "# Prefix `<Tag>\\` Suffix"
+        }
+
+        assertEquals(emptyList(), fixture.check(sources))
+    }
+
+    @Test
     fun `allocates the next free heading anchor across explicit suffix collisions`() =
         withFixture { fixture ->
             val sources = fixture.baselineSources().apply {

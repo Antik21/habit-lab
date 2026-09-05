@@ -501,6 +501,11 @@ class DocumentationChecker {
         while (index < value.length) {
             if (value[index] == '`') {
                 val delimiterLength = backtickRunLength(value, index)
+                if (isEscapedBacktickRun(value, index)) {
+                    result.append(value, index, index + delimiterLength)
+                    index += delimiterLength
+                    continue
+                }
                 val closing = findClosingBacktickRun(value, index + delimiterLength, delimiterLength)
                 if (closing == null) {
                     result.append(value, index, index + delimiterLength)
@@ -542,6 +547,16 @@ class DocumentationChecker {
             index += runLength
         }
         return null
+    }
+
+    private fun isEscapedBacktickRun(value: String, start: Int): Boolean {
+        var backslashCount = 0
+        var index = start - 1
+        while (index >= 0 && value[index] == '\\') {
+            backslashCount += 1
+            index -= 1
+        }
+        return backslashCount % 2 == 1
     }
 
     private fun findHtmlTagEnd(value: String, start: Int): Int? {
