@@ -2,9 +2,12 @@
 
 set -Eeuo pipefail
 
-readonly TEST_DIR="$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-readonly MAESTRO_DIR="$(cd -P -- "$TEST_DIR/.." && pwd -P)"
-readonly REPOSITORY_ROOT="$(cd -P -- "$MAESTRO_DIR/../.." && pwd -P)"
+TEST_DIR="$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)" || exit 1
+readonly TEST_DIR
+MAESTRO_DIR="$(cd -P -- "$TEST_DIR/.." && pwd -P)" || exit 1
+readonly MAESTRO_DIR
+REPOSITORY_ROOT="$(cd -P -- "$MAESTRO_DIR/../.." && pwd -P)" || exit 1
+readonly REPOSITORY_ROOT
 readonly RUNNER_FLOW_DIR="$MAESTRO_DIR/flows"
 readonly ROOT_FLOW="$RUNNER_FLOW_DIR/reference-screens.yaml"
 readonly PLATFORM_FLOW_DIR="$RUNNER_FLOW_DIR/platform"
