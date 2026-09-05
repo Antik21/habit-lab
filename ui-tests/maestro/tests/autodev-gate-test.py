@@ -7,6 +7,7 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -35,7 +36,15 @@ class GateHarness(object):
         self.git("config", "user.name", "Gate QA")
         (self.root / ".gitignore").write_text(".autodev/\n", encoding="utf-8")
         (self.root / "source.txt").write_text("initial\n", encoding="utf-8")
-        self.git("add", ".gitignore", "source.txt")
+        # Contract-v2 receipts are bound to the checked Git tree, not to an
+        # incidental working-copy fixture.  Keep the two mandatory memories
+        # tracked exactly as the gate will read them via git show.
+        memory = self.root / ".agents/skills/habit-lab-autodev/memory"
+        memory.mkdir(parents=True)
+        source_memory = REPOSITORY_ROOT / ".agents/skills/habit-lab-autodev/memory"
+        for name in ("catalog.json", "screen-navigation.md", "lessons.md"):
+            shutil.copyfile(str(source_memory / name), str(memory / name))
+        self.git("add", ".gitignore", "source.txt", ".agents/skills/habit-lab-autodev/memory")
         self.git("commit", "-qm", "initial")
 
     def close(self):
@@ -357,9 +366,12 @@ sys.exit(1)
                           "exitCode": 0 if status == "pass" else 1,
                           "platforms": platforms or ["android"]})
         elif kind == "memory":
-            value.update({"read": ["AGENTS.md"], "written": [],
-                          "lint": {"command": "./gradlew checkDocumentation",
-                                   "status": "pass", "exitCode": 0}})
+            if extra.pop("legacy", False):
+                value.update({"read": ["AGENTS.md"], "written": [],
+                              "lint": {"command": "./gradlew checkDocumentation",
+                                       "status": "pass", "exitCode": 0}})
+            else:
+                return self.strict_memory_receipt(name, revision or self.head(), status=status, **extra)
         elif kind == "review":
             value.update({"independent": True, "reviewedRevision": revision or self.head(),
                           "unresolvedJustifiedFindings": 0,
@@ -372,18 +384,65 @@ sys.exit(1)
         value.update(extra)
         return self.write_json(name, value)
 
-    def successful_finish(self, platforms=("android",), late_digest=None):
+    def strict_memory_receipt(self, name, revision, status="pass", **extra):
+        if status != "pass":
+            raise AssertionError("the v2 fixture models only a passing sealed memory receipt")
+        entries = []
+        reads = []
+        for entry_id, path in (("memory.screen-navigation", "memory/screen-navigation.md"),
+                               ("memory.lessons", "memory/lessons.md")):
+            source = ".agents/skills/habit-lab-autodev/" + path
+            # The fixture changes only source.txt after its initial commit, so
+            # these tracked bytes are identical at every descendant revision.
+            content = (self.root / source).read_bytes()
+            digest = hashlib.sha256(content).hexdigest()
+            entries.append({"entryId": entry_id, "path": path, "sha256": digest, "loadedAt": TIMESTAMP})
+            reads.append({"path": path, "sha256": digest})
+        ledger = {
+            "schemaVersion": 1, "runId": "run", "createdAt": TIMESTAMP, "updatedAt": TIMESTAMP,
+            "finalizedAt": TIMESTAMP, "initialEntryIds": ["memory.screen-navigation", "memory.lessons"],
+            "plannedEntryIds": [], "loadedEntries": entries, "reads": reads, "writes": [],
+            "durationSeconds": 0, "builds": [], "iterations": 0, "attempts": 0, "outcome": "success",
+            "platforms": [], "flakySteps": [], "gateRun": None, "gateStatusSha256": None,
+        }
+        ledger_path = self.write_json("memory-ledger.json", ledger)
+        ledger_digest = hashlib.sha256((self.artifacts() / "memory-ledger.json").read_bytes()).hexdigest()
+        value = {
+            "schemaVersion": 1, "kind": "memory", "sourceRevision": revision, "timestamp": TIMESTAMP,
+            "status": "pass", "runId": "run", "ledger": ledger_path, "ledgerSha256": ledger_digest,
+            "loaded": [{key: item[key] for key in ("entryId", "path", "sha256")}
+                       for item in sorted(entries, key=lambda item: item["entryId"])],
+            "lint": {"command": "python3 .agents/skills/habit-lab-autodev/scripts/autodev_memory.py lint",
+                     "status": "pass", "exitCode": 0},
+            "structureChanged": False, "evalReceipt": None, "instructionPatchCount": 0,
+        }
+        value.update(extra)
+        return self.write_json(name, value)
+
+    def legacy_memory_manifest(self, run_id="run"):
+        """Model an already-sealed v1 run: migration must remain explicit."""
+        manifest_path = self.state(run_id) / "manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest.pop("memoryReceiptContract")
+        manifest_path.write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
+        (self.state(run_id) / "manifest.anchor").write_text(
+            json.dumps({"manifestDigest": canonical_digest(manifest)}, sort_keys=True), encoding="utf-8")
+
+    def successful_finish(self, platforms=("android",), late_digest=None, legacy_memory=False):
         revision = self.head()
         build = self.receipt("build.json", "build", revision, platforms=list(platforms))
         test = self.receipt("test.json", "test", revision, platforms=list(platforms))
-        memory = self.receipt("memory.json", "memory", revision)
+        memory = self.receipt("memory.json", "memory", revision, legacy=legacy_memory)
         review_extra = {"lateRegressionDigest": late_digest or canonical_digest([])}
         review = self.receipt("review.json", "review", revision, **review_extra)
         cleanup = self.receipt("cleanup.json", "cleanup", revision)
+        return self.finish_with_receipts(revision, build, test, memory, review, cleanup)
+
+    def finish_with_receipts(self, revision, build, test, memory, review, cleanup, expected=0):
         return self.call("finish", "run", "--outcome", "success", "--source-revision", revision,
                          "--build-receipt", build, "--test-receipt", test,
                          "--memory-receipt", memory, "--review-receipt", review,
-                         "--cleanup-receipt", cleanup)
+                         "--cleanup-receipt", cleanup, expected=expected)
 
 
 class AutoDevGateTest(unittest.TestCase):
@@ -594,6 +653,49 @@ class AutoDevGateTest(unittest.TestCase):
         for expected in ("Outcome: `success`", "Draft PR: eligible", "Checklist and evidence",
                          "Builds and tests", "Memory, review, cleanup, and devices"):
             self.assertIn(expected, report)
+
+    def test_legacy_sealed_manifest_keeps_legacy_memory_receipt_coverage(self):
+        self.gate.add_freeze_pass()
+        self.gate.legacy_memory_manifest()
+        finished = self.gate.successful_finish(legacy_memory=True)
+        self.assertEqual("eligible", finished["draftPr"])
+        self.assertIn("Memory: pass; 1 read, 0 written; lint pass",
+                      (self.gate.artifacts() / "report.md").read_text(encoding="utf-8"))
+
+    def test_v2_memory_receipt_rejects_empty_forged_bad_hash_and_overplanned_ledgers(self):
+        cases = ("empty", "forged", "read-hash", "write-hash", "four-plan")
+        for index, case in enumerate(cases):
+            if index:
+                self.gate.close()
+                self.gate = GateHarness()
+            self.gate.add_freeze_pass()
+            revision = self.gate.head()
+            build = self.gate.receipt("build.json", "build", revision)
+            test = self.gate.receipt("test.json", "test", revision)
+            memory = self.gate.receipt("memory.json", "memory", revision)
+            review = self.gate.receipt("review.json", "review", revision)
+            cleanup = self.gate.receipt("cleanup.json", "cleanup", revision)
+            ledger_path = self.gate.artifacts() / "memory-ledger.json"
+            receipt_path = self.gate.artifacts() / "memory.json"
+            ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            if case == "empty":
+                ledger["loadedEntries"] = []
+            elif case == "forged":
+                receipt["loaded"][0]["sha256"] = "0" * 64
+            elif case == "read-hash":
+                ledger["reads"][0]["sha256"] = "0" * 64
+            elif case == "write-hash":
+                ledger["writes"] = [{"path": "source.txt", "sha256": "0" * 64}]
+            else:
+                ledger["plannedEntryIds"] = [
+                    "nav.daily-check-in.logic", "nav.daily-check-in.screen",
+                    "nav.experiment-details.logic", "nav.experiment-details.screen",
+                ]
+            ledger_path.write_text(json.dumps(ledger, sort_keys=True), encoding="utf-8")
+            receipt["ledgerSha256"] = hashlib.sha256(ledger_path.read_bytes()).hexdigest()
+            receipt_path.write_text(json.dumps(receipt, sort_keys=True), encoding="utf-8")
+            self.gate.finish_with_receipts(revision, build, test, memory, review, cleanup, expected=6)
 
     def test_receipt_schema_revision_coverage_review_and_cleanup_block_success(self):
         failures = ("prose", "stale", "coverage", "review", "cleanup")

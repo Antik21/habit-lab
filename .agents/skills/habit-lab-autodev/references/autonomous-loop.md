@@ -27,6 +27,8 @@ Use commands selected from the owner catalog rather than copied into this skill.
 
 Run the narrow checks while iterating and the required owner gate afterward. Exercise the declared regression boundary on every requested platform. Obtain an independent review of the diff, checklist, evidence, architecture, safety, and compatibility; resolve justified findings and repeat affected checks.
 
+Use the progressive memory helper before `finish`: begin with its two initial records, select only relevant catalog entries, run lint, and finalize the memory ledger. On a success path, create the revision-bound memory receipt; blocked, failed, and partial paths retain the ledger without a promotable receipt. This is evidence for the frozen gate, not permission to change it.
+
 ## 6. Cleanup and gate
 
 Stop only processes launched by this run. Release only reservations acquired by this run. Delete only explicitly ephemeral scratch owned by this run. Never delete app resources, app data, or app state, and do not change a pre-existing emulator/simulator target beyond stopping, releasing, or removing those run-owned processes, reservations, or scratch paths. Preserve every pre-existing, concurrent-run, and user-owned process, virtual device, reservation, file, state, and canonical artifact. Preserve the current run's intended ignored evidence and source changes. Evaluate the frozen checklist and required checks without changing their criteria.
@@ -43,3 +45,7 @@ Choose one terminal outcome:
 - `partial`: useful scoped work exists, but the full requested contour was neither proved nor externally blocked. Enumerate completed and missing assertions.
 
 Never relabel a gate failure, missing platform, incomplete evidence, or unreviewed change as success.
+
+## After a sealed terminal result
+
+Only then may [progressive memory](self-learning.md) observe correction proposals from distinct successful, independently reviewed runs. A second observation confirms a proposal; a third produces advice, not an automatic patch. Consolidation is advisory around every five terminal ledgers. A self-patch is a separate, explicit, one-record normal commit after validation; frozen core paths remain denied.

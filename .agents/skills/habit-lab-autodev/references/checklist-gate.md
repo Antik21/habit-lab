@@ -65,11 +65,11 @@ After two failures, `--reread-reference` is an exact JSON object with `schemaVer
 
 ## Receipt schemas
 
-Receipt files are inputs below an allowed evidence root. The gate hashes them into `receipts.json`; it never treats prose or a bare boolean as proof. Every receipt is a JSON object with `schemaVersion: 1`, the exact full `sourceRevision`, strict UTC `timestamp`, terminal `status`, and the matching `kind`. Success requires `status: "pass"`; a non-success report may index supplied `fail`, `blocked`, or `skipped` receipts without promoting them.
+Receipt files are inputs below an allowed evidence root. The gate hashes them into `receipts.json`; it never treats prose or a bare boolean as proof. Every receipt is a JSON object with `schemaVersion: 1`, the exact full `sourceRevision`, strict UTC `timestamp`, terminal `status`, and the matching `kind`. Success requires `status: "pass"`; a non-success report may index supplied non-promoting build, test, review, or cleanup receipts without promoting them.
 
 Build and test receipts require `kind: "build"|"test"`, nonempty `command`, integer `exitCode`, and explicit unique `platforms: ["android", "ios"]` as applicable. Pass requires exit 0; fail requires nonzero. Use separate receipts when commands differ.
 
-The composite memory receipt requires `kind: "memory"`, nonempty `read`, `written` (possibly empty), and `lint: {"command": "...", "status": "pass", "exitCode": 0}`. This records both memory use and its lint result.
+The composite memory receipt is generated only from a successful ledger by `autodev_memory.py receipt`. Its exact closed fields bind `runId`, checked `sourceRevision`, the run ledger path/SHA-256, and each loaded entry path/SHA-256; its lint command/status/exit code are exactly passing. The helper derives `structureChanged`, an `instructionPatchCount` from zero to one, and any structural evaluation receipt from the same manifest-source-to-checked Git range used by the gate. Blocked, failed, and partial outcomes retain their memory ledger and omit this receipt; if one is supplied, it remains a strict non-promoting passing snapshot. The gate rereads the ledger and evaluation artifact, so a claimed memory use cannot replace current bytes.
 
 The independent review receipt always requires `kind: "review"`, `independent: true`, and `reviewedRevision` equal to the checked revision. For success only, it must also have `status: "pass"`, `unresolvedJustifiedFindings: 0`, `lateRegressionDigest` equal to current `status`, and a timestamp strictly after the latest late regression. Non-success may index a structured fail/blocked/skipped review receipt without promotion.
 

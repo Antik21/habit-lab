@@ -40,3 +40,5 @@ Report the terminal outcome defined in [the autonomous loop](autonomous-loop.md)
 Gate failure forbids both `success` and Draft PR creation. A Draft PR also requires the user's Git/GitHub authorization and repository account rules. Even after success, stabilization and merge remain outside this skill and require a separate explicit command.
 
 Do not write unverified observations into durable memory. Promote a lesson only after it satisfies the [curated lessons contract](../memory/lessons.md); navigation nodes must follow the [navigation schema](../memory/nav/_SCHEMA.md).
+
+The memory receipt is generated from a successful ledger by the reviewed helper and must bind the checked revision to its actual ledger digest and loaded path/digest list, with exact passing lint. It derives whether structure changed from the gate manifest-to-checked range, requires a passing evaluation receipt with the matching revision/path/content digest when true, and permits zero or one instruction patch. Non-success paths retain their ledger without a promotable receipt. Local history classifications and consolidation advice never themselves prove an assertion or rewrite durable memory.

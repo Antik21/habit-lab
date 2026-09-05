@@ -27,6 +27,7 @@ xcodebuild -project iosApp/iosApp.xcodeproj -scheme iosApp -sdk iphonesimulator 
 ./gradlew checkMaestroShell
 ./ui-tests/maestro/tests/xcode-preflight-test.sh
 python3 .agents/skills/habit-lab-autodev/scripts/autodev_gate.py --help
+python3 .agents/skills/habit-lab-autodev/scripts/autodev_memory.py --help
 ```
 
 `:shared:check` includes architecture and documentation checks, plus the Maestro shell contract check on non-Windows hosts when Bash is available. Native Windows and hosts without Bash skip that shell-only task and do not establish its coverage. Android device tests require one API 33+ device; CI uses an API 36 Google APIs x86_64 emulator. Run `:shared:iosSimulatorArm64Test` on Apple Silicon and `:shared:iosX64Test` on Intel macOS, where that target is configured. See [testing and verification](07-testing-verification.md) before choosing a subset.
