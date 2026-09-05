@@ -100,6 +100,26 @@ def validate_id(value: str, label: str) -> str:
     return value
 
 
+def parse_git_paths(raw: bytes, label: str) -> List[str]:
+    """Decode NUL-delimited Git paths without quotePath-dependent parsing."""
+    if not isinstance(raw, bytes) or (raw and not raw.endswith(b"\0")):
+        raise GateError("%s Git path output is malformed" % label, EXIT_INTEGRITY)
+    paths = []
+    for encoded in (raw[:-1].split(b"\0") if raw else []):
+        if not encoded:
+            raise GateError("%s Git path output contains an empty path" % label, EXIT_INTEGRITY)
+        try:
+            path = encoded.decode("utf-8", "strict")
+        except UnicodeDecodeError:
+            raise GateError("%s Git path is not valid UTF-8" % label, EXIT_INTEGRITY)
+        candidate = Path(path)
+        if (candidate.is_absolute() or not candidate.parts or ".." in candidate.parts or
+                "\\" in path or candidate.as_posix() != path):
+            raise GateError("%s Git path is not a safe canonical relative path" % label, EXIT_INTEGRITY)
+        paths.append(path)
+    return paths
+
+
 def parse_platforms(values: Optional[Sequence[str]]) -> List[str]:
     selected = list(values or PLATFORMS)
     if (not selected or any(not isinstance(item, str) for item in selected) or
@@ -1404,21 +1424,24 @@ def git_tree_blob(root: Path, revision: str, relative: str, label: str) -> bytes
 
 def structural_instruction_contract(root: Path, source_revision: str,
                                    checked_revision: str) -> Tuple[List[str], str]:
-    result = subprocess.run(["git", "diff", "--name-only", source_revision, checked_revision, "--"],
-                            cwd=str(root), text=True, stdout=subprocess.PIPE,
+    result = subprocess.run(["git", "diff", "--name-only", "-z", source_revision, checked_revision, "--"],
+                            cwd=str(root), stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE, check=False)
     if result.returncode:
         raise GateError("cannot determine structural instruction changes", EXIT_GATE)
     prefix = ".agents/skills/habit-lab-autodev/memory/instructions/"
-    paths = sorted(line for line in result.stdout.splitlines() if line.startswith(prefix))
+    paths = sorted(path for path in parse_git_paths(result.stdout, "structural instruction diff")
+                   if path.startswith(prefix))
     if len(paths) > 1:
         raise GateError("at most one structural instruction change may be sealed", EXIT_GATE)
     if paths:
-        isolated = subprocess.run(["git", "diff-tree", "--no-commit-id", "--name-only", "-r", checked_revision],
-                                  cwd=str(root), text=True, stdout=subprocess.PIPE,
+        isolated = subprocess.run(["git", "diff-tree", "--no-commit-id", "--name-only", "-z", "-r", checked_revision],
+                                  cwd=str(root), stdout=subprocess.PIPE,
                                   stderr=subprocess.PIPE, check=False)
-        isolated_paths = sorted(line for line in isolated.stdout.splitlines() if line)
-        if isolated.returncode or isolated_paths != paths:
+        if isolated.returncode:
+            raise GateError("cannot determine isolated structural instruction change", EXIT_GATE)
+        isolated_paths = sorted(parse_git_paths(isolated.stdout, "structural instruction commit"))
+        if isolated_paths != paths:
             raise GateError("structural instruction change is not an isolated commit", EXIT_GATE)
     records = [{"path": path,
                 "sha256": hashlib.sha256(git_tree_blob(root, checked_revision, path,
@@ -1690,12 +1713,12 @@ def parse_receipt(root: Path, run: Run, path: str, expected_kind: str,
 
 
 def changed_files(root: Path, base: str, checked: str) -> List[str]:
-    result = subprocess.run(["git", "diff", "--name-only", "--diff-filter=ACMR", base, checked, "--"],
-                            cwd=str(root), text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+    result = subprocess.run(["git", "diff", "--name-only", "-z", "--diff-filter=ACMR", base, checked, "--"],
+                            cwd=str(root), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                             check=False)
     if result.returncode != 0:
         raise GateError("cannot determine changed source for bounded scan", EXIT_GATE)
-    return [line for line in result.stdout.splitlines() if line]
+    return parse_git_paths(result.stdout, "changed source")
 
 
 def require_clean_revision(root: Path) -> None:

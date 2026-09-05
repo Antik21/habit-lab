@@ -282,11 +282,13 @@ class AutoDevMemoryTest(unittest.TestCase):
         self.assertEqual(["source.txt"], [item["path"] for item in ledger["writes"]])
 
         for field in ("read", "write"):
-            run_id = "duplicate-" + field
-            self.memory.start(run_id)
-            self.memory.denied("finalize", run_id, "--outcome", "success",
-                               "--" + field, "source.txt", "--" + field, "source.txt")
-            self.assertIsNone(self.memory.ledger(run_id)["outcome"])
+            for suffix, paths in (("exact", ("source.txt", "source.txt")),
+                                  ("canonical", ("source.txt", "./source.txt"))):
+                run_id = "duplicate-%s-%s" % (field, suffix)
+                self.memory.start(run_id)
+                self.memory.denied("finalize", run_id, "--outcome", "success",
+                                   "--" + field, paths[0], "--" + field, paths[1])
+                self.assertIsNone(self.memory.ledger(run_id)["outcome"])
 
     def test_initial_catalog_paths_cannot_redirect_the_mandatory_records(self):
         expected = {
@@ -320,7 +322,7 @@ class AutoDevMemoryTest(unittest.TestCase):
         self.assertIn("Outcome: `blocked`", report)
         self.assertIn("Draft PR: not eligible", report)
 
-    def test_structural_receipt_is_derived_and_accepted_by_helper_and_gate(self):
+    def test_quoted_non_ascii_structural_receipt_is_derived_by_helper_and_gate(self):
         base = self.memory.head()
         run_id = "structural"
         self.memory.gate_call("init", run_id, "--task-id", "DEN-20", "--task-type", "feature",
@@ -331,16 +333,26 @@ class AutoDevMemoryTest(unittest.TestCase):
         self.memory.start(run_id)
         self.memory.finalize(run_id, builds=["check:pass"], platforms=["android"])
 
-        relative, _ = self.memory.instruction_record(
-            run_id, "derived", structure=True, evaluation=".autodev/artifacts/structural/eval.json")
-        self.memory.git("add", relative)
+        relative = ".agents/skills/habit-lab-autodev/memory/instructions/caf\u00e9.json"
+        record = self.memory.root / relative
+        record.parent.mkdir(parents=True, exist_ok=True)
+        record.write_text(json.dumps({
+            "schemaVersion": 1, "kind": "autodev-instruction-record", "runId": run_id,
+            "instructionId": "derived", "instruction": "Use the reviewed correction.",
+            "structureChange": True, "evalReceipt": ".autodev/artifacts/structural/eval.json",
+        }, sort_keys=True) + "\n", encoding="utf-8")
+        self.memory.git("config", "core.quotePath", "true")
+        self.memory.git("add", "--", relative)
         self.memory.git("commit", "-qm", "add structural instruction record")
         checked = self.memory.head()
-        record_digest = sha_bytes((self.memory.root / relative).read_bytes())
+        record_digest = sha_bytes(record.read_bytes())
         checked_change_digest = canonical_digest({
             "sourceRevision": checked,
             "paths": [{"path": relative, "sha256": record_digest}],
         })
+        # A quoted non-ASCII instruction path is structural, so helper-side
+        # classification must still require a passing evaluation receipt.
+        self.memory.denied("receipt", run_id, "--source-revision", checked)
         evaluation = self.memory.write_gate_receipt(run_id, "eval.json", {
             "schemaVersion": 1, "kind": "autodev-memory-eval", "runId": run_id,
             "sourceRevision": checked, "status": "pass", "command": "python3 focused_test.py",
@@ -411,12 +423,13 @@ except OSError as exc:
 except module.MemoryError as exc:
     print(json.dumps({"classification": "memory", "exitCode": exc.code}, sort_keys=True))
 '''
-        # macOS often resolves /var through a symlink; use a disposable directory
-        # below the physical workspace so the probe reaches the lock body.
-        with tempfile.TemporaryDirectory(prefix=".qa-autodev-lock-", dir=str(REPOSITORY_ROOT)) as temporary:
+        # macOS commonly exposes system temp through /var -> /private/var.
+        # Resolve that physical directory before the no-follow lock probe.
+        with tempfile.TemporaryDirectory(prefix="habitlab-den20-lock-") as temporary:
+            physical_temporary = Path(temporary).resolve()
             result = subprocess.run([sys.executable, "-c", script,
                                      str(self.memory.root / SKILL_RELATIVE / "scripts/autodev_memory.py"),
-                                     temporary], cwd=str(self.memory.root), text=True,
+                                     str(physical_temporary)], cwd=str(self.memory.root), text=True,
                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
             self.assertEqual(0, result.returncode, result.stderr)
             self.assertEqual({"classification": "body-oserror", "errno": 5}, json.loads(result.stdout))

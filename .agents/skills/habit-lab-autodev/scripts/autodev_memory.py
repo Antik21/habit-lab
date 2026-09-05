@@ -122,6 +122,28 @@ def checked_relative(value, label="path"):
     return pure
 
 
+def parse_git_paths(raw, label):
+    """Decode Git's NUL-delimited path records without quotePath ambiguity."""
+    if not isinstance(raw, bytes) or (raw and not raw.endswith(b"\0")):
+        raise MemoryError("%s Git path output is malformed" % label, EXIT_INTEGRITY)
+    paths = []
+    for encoded in (raw[:-1].split(b"\0") if raw else []):
+        if not encoded:
+            raise MemoryError("%s Git path output contains an empty path" % label, EXIT_INTEGRITY)
+        try:
+            path = encoded.decode("utf-8", "strict")
+        except UnicodeDecodeError:
+            raise MemoryError("%s Git path is not valid UTF-8" % label, EXIT_INTEGRITY)
+        try:
+            normalized = checked_relative(path, "%s Git path" % label).as_posix()
+        except MemoryError:
+            raise MemoryError("%s Git path is not a safe canonical relative path" % label, EXIT_INTEGRITY)
+        if normalized != path:
+            raise MemoryError("%s Git path is not canonical" % label, EXIT_INTEGRITY)
+        paths.append(path)
+    return paths
+
+
 def safe_path(root, relative, allow_missing=False):
     rel = checked_relative(relative)
     current = root
@@ -1143,21 +1165,24 @@ def source_run_success(root, run_id, gate_cache=None):
 
 
 def structural_instruction_contract(root, source_revision, checked_revision):
-    result = subprocess.run(["git", "diff", "--name-only", source_revision, checked_revision, "--"],
+    result = subprocess.run(["git", "diff", "--name-only", "-z", source_revision, checked_revision, "--"],
                             cwd=str(root), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                            text=True, check=False)
+                            check=False)
     if result.returncode:
         raise MemoryError("cannot determine structural instruction changes", EXIT_IO)
     prefix = ".agents/skills/habit-lab-autodev/memory/instructions/"
-    paths = sorted(line for line in result.stdout.splitlines() if line.startswith(prefix))
+    paths = sorted(path for path in parse_git_paths(result.stdout, "structural instruction diff")
+                   if path.startswith(prefix))
     if len(paths) > 1:
         raise MemoryError("at most one structural instruction change may be sealed", EXIT_GATE)
     if paths:
-        isolated = subprocess.run(["git", "diff-tree", "--no-commit-id", "--name-only", "-r", checked_revision],
+        isolated = subprocess.run(["git", "diff-tree", "--no-commit-id", "--name-only", "-z", "-r", checked_revision],
                                   cwd=str(root), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                  text=True, check=False)
-        isolated_paths = sorted(line for line in isolated.stdout.splitlines() if line)
-        if isolated.returncode or isolated_paths != paths:
+                                  check=False)
+        if isolated.returncode:
+            raise MemoryError("cannot determine isolated structural instruction change", EXIT_IO)
+        isolated_paths = sorted(parse_git_paths(isolated.stdout, "structural instruction commit"))
+        if isolated_paths != paths:
             raise MemoryError("structural instruction change is not an isolated commit", EXIT_GATE)
     records = [{"path": path, "sha256": sha_bytes(commit_blob(root, checked_revision, path,
                                                                  "structural instruction record"))}
@@ -1303,15 +1328,17 @@ def validate_eval_receipt(root, run_id, relative, source_revision=None, change_d
 
 
 def changed_paths(root):
-    result = subprocess.run(["git", "diff", "--name-only", "HEAD"], cwd=str(root), text=True,
+    result = subprocess.run(["git", "diff", "--name-only", "-z", "HEAD"], cwd=str(root),
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
-    cached = subprocess.run(["git", "diff", "--cached", "--name-only"], cwd=str(root), text=True,
+    cached = subprocess.run(["git", "diff", "--cached", "--name-only", "-z"], cwd=str(root),
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
-    untracked = subprocess.run(["git", "ls-files", "--others", "--exclude-standard"], cwd=str(root), text=True,
+    untracked = subprocess.run(["git", "ls-files", "--others", "--exclude-standard", "-z"], cwd=str(root),
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
     if result.returncode or cached.returncode or untracked.returncode:
         raise MemoryError("cannot inspect Git changes", EXIT_IO)
-    return sorted(set(line for line in (result.stdout + "\n" + cached.stdout + "\n" + untracked.stdout).splitlines() if line))
+    return sorted(set(parse_git_paths(result.stdout, "working diff") +
+                      parse_git_paths(cached.stdout, "staged diff") +
+                      parse_git_paths(untracked.stdout, "untracked files")))
 
 
 SELF_PATCH_FIELDS = ("schemaVersion", "runId", "record", "state", "baseRevision", "commit",
@@ -1372,11 +1399,13 @@ def committed_change_binding(root, revision, record, base_revision, require_curr
         raise MemoryError("self-patch commit is no longer current HEAD", EXIT_INTEGRITY)
     if commit_parent(root, revision) != base_revision:
         raise MemoryError("self-patch commit parent does not match the validated HEAD", EXIT_INTEGRITY)
-    result = subprocess.run(["git", "diff-tree", "--no-commit-id", "--name-only", "-r", revision],
+    result = subprocess.run(["git", "diff-tree", "--no-commit-id", "--name-only", "-z", "-r", revision],
                             cwd=str(root), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                            text=True, check=False)
-    paths = sorted(line for line in result.stdout.splitlines() if line)
-    if result.returncode or paths != [record]:
+                            check=False)
+    if result.returncode:
+        raise MemoryError("cannot determine self-patch commit paths", EXIT_IO)
+    paths = sorted(parse_git_paths(result.stdout, "self-patch commit"))
+    if paths != [record]:
         raise MemoryError("self-patch commit is not isolated to its allowlisted record", EXIT_GATE)
     raw = commit_blob(root, revision, record, "instruction record")
     return change_digest(revision, record, raw)
