@@ -29,7 +29,7 @@ Run the narrow checks while iterating and the required owner gate afterward. Exe
 
 ## 6. Cleanup and gate
 
-Stop, release, or delete only app/process resources and scratch paths created by this run, plus reservations explicitly acquired by this run. Preserve every pre-existing, concurrent-run, and user-owned process, virtual device, reservation, file, state, and canonical artifact. Preserve the current run's intended ignored evidence and source changes. Evaluate the frozen checklist and required checks without changing their criteria.
+Stop only processes launched by this run. Release only reservations acquired by this run. Delete only explicitly ephemeral scratch owned by this run. Never delete app resources, app data, or app state, and do not change a pre-existing emulator/simulator target beyond stopping, releasing, or removing those run-owned processes, reservations, or scratch paths. Preserve every pre-existing, concurrent-run, and user-owned process, virtual device, reservation, file, state, and canonical artifact. Preserve the current run's intended ignored evidence and source changes. Evaluate the frozen checklist and required checks without changing their criteria.
 
 ## 7. Draft PR or report
 
