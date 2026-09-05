@@ -39,6 +39,7 @@ TASK_TYPES = ("feature", "bug", "perf")
 OUTCOMES = ("success", "blocked", "failed", "partial")
 PHASES = ("observation", "baseline", "fixed", "candidate", "repeat")
 EVIDENCE_TYPES = ("junit", "command", "metric")
+OBSERVATION_OUTCOMES = ("not-reproduced", "environment-blocked", "diagnostic-error")
 MAX_SCAN_BYTES = 64 * 1024 * 1024
 
 
@@ -411,6 +412,25 @@ def validate_event(folder: str, event: Dict[str, Any]) -> None:
             if event[field] is not None and (not isinstance(event[field], str) or not event[field].strip()):
                 raise GateError("attempt optional field is invalid", EXIT_INTEGRITY)
         parse_timestamp(event["recordedAt"], "attempt recordedAt", EXIT_INTEGRITY)
+    elif folder == "observations":
+        exact_keys(event, common + ("criterionId", "platform", "scenarioKey", "outcome", "evidence",
+                   "evidenceMetadata", "sourceRevision", "recordedAt", "checklistDigest"),
+                   "observation event")
+        validate_artifact_record(event["evidence"], "observation evidence")
+        try:
+            validate_id(event["criterionId"], "observation criterionId")
+        except (GateError, TypeError):
+            raise GateError("observation criterionId is invalid", EXIT_INTEGRITY)
+        if (event["platform"] not in PLATFORMS or
+                event["outcome"] not in OBSERVATION_OUTCOMES or
+                not isinstance(event["scenarioKey"], str) or not event["scenarioKey"].strip() or
+                not isinstance(event["evidenceMetadata"], dict) or
+                not isinstance(event["sourceRevision"], str) or
+                not re.fullmatch(r"[0-9a-f]{40,64}", event["sourceRevision"]) or
+                not isinstance(event["checklistDigest"], str) or
+                not re.fullmatch(r"[0-9a-f]{64}", event["checklistDigest"])):
+            raise GateError("observation event fields are invalid", EXIT_INTEGRITY)
+        parse_timestamp(event["recordedAt"], "observation recordedAt", EXIT_INTEGRITY)
     else:
         raise GateError("unknown state event directory", EXIT_INTEGRITY)
     if (type(event["sequence"]) is not int or event["sequence"] < 1 or
@@ -659,7 +679,7 @@ def init_run(args: argparse.Namespace, root: Path, roots: RuntimeRoots) -> Dict[
     os.close(lock_fd)
     os.mkdir("anchors", 0o700, dir_fd=state_fd)
     anchors_fd = open_child_dir(state_fd, "anchors")
-    for folder in ("criteria", "late-regressions", "attempts"):
+    for folder in ("criteria", "late-regressions", "attempts", "observations"):
         os.mkdir(folder, 0o700, dir_fd=state_fd)
         os.mkdir(folder, 0o700, dir_fd=anchors_fd)
     manifest = {
@@ -922,6 +942,34 @@ def validate_reread(data: bytes, criterion_id: str, platform: str, hypothesis: s
     return {"format": "reread-reference", "reference": value["reference"]}
 
 
+def validate_observation_evidence(data: bytes, criterion_id: str, platform: str,
+                                  scenario_key: str, outcome: str,
+                                  source_revision: str) -> Dict[str, Any]:
+    value = json_object_bytes(data, "bug observation evidence")
+    exact_keys(value, ("schemaVersion", "kind", "sourceRevision", "timestamp", "platform",
+                       "criterionId", "scenarioKey", "outcome", "command", "exitCode",
+                       "diagnostic"),
+               "bug observation evidence", EXIT_VALIDATION)
+    exit_code = value["exitCode"]
+    if (type(value["schemaVersion"]) is not int or value["schemaVersion"] != SCHEMA_VERSION or
+            value["kind"] != "bug-observation" or value["sourceRevision"] != source_revision or
+            value["platform"] != platform or value["criterionId"] != criterion_id or
+            not isinstance(value["scenarioKey"], str) or not value["scenarioKey"].strip() or
+            value["scenarioKey"] != scenario_key or
+            value["outcome"] != outcome or outcome not in OBSERVATION_OUTCOMES or
+            not isinstance(value["command"], str) or not value["command"].strip() or
+            type(exit_code) is not int or
+            not isinstance(value["diagnostic"], str) or not value["diagnostic"].strip()):
+        raise GateError("bug observation evidence fields do not match the command")
+    if ((outcome == "not-reproduced" and exit_code != 0) or
+            (outcome != "not-reproduced" and exit_code == 0)):
+        raise GateError("bug observation outcome does not match exitCode")
+    parse_timestamp(value["timestamp"], "bug observation evidence")
+    return {"format": "bug-observation", "scenarioKey": scenario_key, "outcome": outcome,
+            "command": value["command"].strip(), "exitCode": exit_code,
+            "diagnostic": value["diagnostic"].strip()}
+
+
 def computed_perf_metadata(baseline: Dict[str, Any], candidate: Dict[str, Any],
                            baseline_sha256: str) -> Dict[str, Any]:
     comparable = ("metricName", "unit", "scenarioFingerprint", "instrumentation",
@@ -990,7 +1038,6 @@ def verify_freeze(run: Run) -> Tuple[Dict[str, Any], List[Dict[str, Any]], List[
 
 
 def record_attempt(args: argparse.Namespace, run: Run, result: str) -> Dict[str, Any]:
-    derive(run, require_frozen=True)
     frozen, _, _ = verify_freeze(run)
     criterion = find_criterion(run, args.criterion)
     if args.platform not in criterion["requiredPlatforms"]:
@@ -1087,6 +1134,34 @@ def record_attempt(args: argparse.Namespace, run: Run, result: str) -> Dict[str,
     return {"ok": True, "command": result, "runId": run.run_id, "attempt": event}
 
 
+def record_observation(args: argparse.Namespace, run: Run) -> Dict[str, Any]:
+    frozen, _, _ = verify_freeze(run)
+    manifest = run.manifest
+    criterion = find_criterion(run, args.criterion)
+    if manifest["taskType"] != "bug" or criterion["kind"] != "repro":
+        raise GateError("observe is limited to bug reproduction criteria")
+    if args.platform not in criterion["requiredPlatforms"]:
+        raise GateError("platform is not required by this criterion")
+    source_revision = resolve_revision(run.root, args.source_revision)
+    if source_revision != manifest["sourceRevision"]:
+        raise GateError("bug reproduction observations must use the immutable initial revision")
+    scenario_key = args.scenario_key.strip()
+    evidence = artifact_record(run.root, run, args.evidence)
+    metadata = validate_observation_evidence(
+        read_recorded_bytes(run, evidence), args.criterion, args.platform,
+        scenario_key, args.outcome, source_revision)
+    derive(run, require_frozen=True)
+    event = run.append_event("observations", {
+        "criterionId": args.criterion, "platform": args.platform,
+        "scenarioKey": scenario_key,
+        "outcome": args.outcome, "evidence": evidence, "evidenceMetadata": metadata,
+        "sourceRevision": source_revision, "recordedAt": now(),
+        "checklistDigest": frozen["checklistDigest"],
+    })
+    return {"ok": True, "command": "observe", "runId": run.run_id,
+            "observation": event}
+
+
 def revalidate_record(root: Path, run: Run, record: Dict[str, Any]) -> None:
     current = artifact_record(root, run, record.get("path", ""))
     if current["size"] != record.get("size") or current["sha256"] != record.get("sha256"):
@@ -1137,6 +1212,7 @@ def derive(run: Run, require_frozen: bool = False) -> Dict[str, Any]:
         if late:
             raise GateError("late regressions exist without a freeze", EXIT_INTEGRITY)
     attempts = run.events("attempts")
+    observations = run.events("observations")
     manifest = run.manifest
     validated_attempts: List[Dict[str, Any]] = []
     for event in attempts:
@@ -1209,6 +1285,22 @@ def derive(run: Run, require_frozen: bool = False) -> Dict[str, Any]:
             if metadata != event.get("rereadMetadata"):
                 raise GateError("recorded reread metadata was mutated", EXIT_INTEGRITY)
         validated_attempts.append(event)
+    for event in observations:
+        criterion = next((item for item in core + late
+                          if item["criterionId"] == event["criterionId"]), None)
+        if (manifest["taskType"] != "bug" or criterion is None or
+                criterion["kind"] != "repro" or
+                event["platform"] not in criterion["requiredPlatforms"] or
+                event["sourceRevision"] != manifest["sourceRevision"] or
+                event["checklistDigest"] != (frozen["checklistDigest"] if frozen else None)):
+            raise GateError("observation is not bound to the initial bug checklist", EXIT_INTEGRITY)
+        revalidate_record(run.root, run, event["evidence"])
+        metadata = validate_observation_evidence(
+            read_recorded_bytes(run, event["evidence"]), event["criterionId"],
+            event["platform"], event["scenarioKey"], event["outcome"],
+            event["sourceRevision"])
+        if metadata != event["evidenceMetadata"]:
+            raise GateError("recorded observation metadata was mutated", EXIT_INTEGRITY)
     matrix = []
     passing = True
     terminal_partial = False
@@ -1237,7 +1329,8 @@ def derive(run: Run, require_frozen: bool = False) -> Dict[str, Any]:
             "checklistDigest": frozen["checklistDigest"] if frozen else None,
             "lateRegressionDigest": late_digest,
             "matrix": matrix, "passing": passing and bool(matrix),
-            "terminalPartial": terminal_partial, "attempts": attempts}
+            "terminalPartial": terminal_partial, "attempts": attempts,
+            "observations": observations}
 
 
 def status(args: argparse.Namespace, run: Run) -> Dict[str, Any]:
@@ -1460,15 +1553,29 @@ def report_markdown(run: Run, outcome: str, reason: Optional[str], derived: Dict
             event["evidence"]["path"], event.get("hypothesis") or "none"))
         if event["evidenceType"] == "metric":
             metadata = event["evidenceMetadata"]
-            comparison = ("; computed %s delta %s %s against minimum %s (%s)" % (
+            comparison = ("; computed %s delta %s %s against minimum %s (%s), "
+                          "baselineEvidenceSha256 `%s`" % (
                 metadata["threshold"]["direction"],
                 metadata["computedDelta"], metadata["threshold"]["deltaUnit"],
-                metadata["threshold"]["minimumDelta"], metadata["computedResult"])
+                metadata["threshold"]["minimumDelta"], metadata["computedResult"],
+                metadata["baselineEvidenceSha256"])
                 if "computedDelta" in metadata else "; immutable baseline")
             lines.append("  - Metric: %s=%s %s, %s/%s, samples=%s%s" % (
                 metadata["metricName"], metadata["value"], metadata["unit"],
                 metadata["instrumentation"], metadata["aggregation"],
                 metadata["sampleCount"], comparison))
+    lines.extend(["", "## Bug reproduction observations", ""])
+    if not derived["observations"]:
+        lines.append("- No diagnostic observations recorded.")
+    for event in derived["observations"]:
+        metadata = event["evidenceMetadata"]
+        lines.append("- %s/%s scenario %s: %s at `%s`, evidence `%s`, command exit %s; "
+                     "diagnostic: %s" % (
+            event["criterionId"], event["platform"],
+            json.dumps(event["scenarioKey"], ensure_ascii=True),
+            event["outcome"], event["sourceRevision"], event["evidence"]["path"],
+            metadata["exitCode"],
+            json.dumps(metadata["diagnostic"], ensure_ascii=True)))
     lines.extend(["", "## Builds and tests", ""])
     for kind in ("build", "test"):
         values = receipts.get(kind, [])
@@ -1572,6 +1679,7 @@ def finish(args: argparse.Namespace, run: Run) -> Dict[str, Any]:
         changed = changed_files(run.root, run.manifest["sourceRevision"], checked)
         checked_inputs = [item["artifact"]["path"] for item in receipt_index]
         checked_inputs.extend(event["evidence"]["path"] for event in derived["attempts"])
+        checked_inputs.extend(event["evidence"]["path"] for event in derived["observations"])
         checked_inputs.extend(event["rereadReference"]["path"] for event in derived["attempts"] if event.get("rereadReference"))
         scan = bounded_scan(run, changed + checked_inputs)
     report = report_markdown(run, args.outcome, args.reason, derived, receipt_values, checked, scan)
@@ -1631,6 +1739,15 @@ def build_parser() -> JsonParser:
         attempt.add_argument("--scenario-fingerprint")
         attempt.add_argument("--hypothesis")
         attempt.add_argument("--reread-reference")
+    observe = sub.add_parser("observe", help="append an immutable bug reproduction diagnostic")
+    observe.add_argument("run_id")
+    observe.add_argument("--criterion", required=True)
+    observe.add_argument("--platform", choices=PLATFORMS, required=True)
+    observe.add_argument("--scenario-key", required=True)
+    observe.add_argument("--outcome", choices=OBSERVATION_OUTCOMES, required=True)
+    observe.add_argument("--evidence", required=True,
+                         help="repo-relative structured bug observation JSON")
+    observe.add_argument("--source-revision", required=True)
     status_parser = sub.add_parser("status", help="derive and revalidate run status")
     status_parser.add_argument("run_id")
     finish_parser = sub.add_parser("finish", help="write the terminal report and evaluate success")
@@ -1666,6 +1783,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                         payload = freeze(args, run)
                     elif args.command in ("pass", "fail"):
                         payload = record_attempt(args, run, args.command)
+                    elif args.command == "observe":
+                        payload = record_observation(args, run)
                     elif args.command == "status":
                         payload = status(args, run)
                     elif args.command == "finish":

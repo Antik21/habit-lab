@@ -142,6 +142,24 @@ class GateHarness(object):
             "command": command,
         }, run_id)
 
+    def observation_evidence(self, name, criterion="repro", platform="android",
+                             scenario="repro-submit", outcome="not-reproduced",
+                             revision=None, command="./gradlew reproduce",
+                             diagnostic="fixture diagnostic"):
+        return self.write_json(name, {
+            "schemaVersion": 1,
+            "kind": "bug-observation",
+            "sourceRevision": revision or self.head(),
+            "timestamp": TIMESTAMP,
+            "platform": platform,
+            "criterionId": criterion,
+            "scenarioKey": scenario,
+            "outcome": outcome,
+            "command": command,
+            "exitCode": 0 if outcome == "not-reproduced" else 1,
+            "diagnostic": diagnostic,
+        })
+
     def metric_evidence(self, name, criterion="perf", platform="android", result="pass",
                         phase="baseline", fingerprint="fixture-v1", revision=None, value=12.5,
                         metric_name="duration", unit="ms", instrumentation="trace-v1",
@@ -172,6 +190,9 @@ class GateHarness(object):
 
     def attempt_count(self, run_id="run"):
         return len(list((self.state(run_id) / "attempts").glob("*.json")))
+
+    def observation_count(self, run_id="run"):
+        return len(list((self.state(run_id) / "observations").glob("*.json")))
 
     def snapshot_run(self, run_id="run"):
         snapshot = {}
@@ -223,6 +244,8 @@ def raced_read(fd, amount):
         elif mode == "content-change":
             with target.open("r+b") as stream:
                 stream.write(b"changed")
+                stream.seek(0, os.SEEK_END)
+                stream.write(b"+")
         elif mode == "replacement-during-read":
             replace_target()
     return data
@@ -296,6 +319,12 @@ sys.exit(1)
         if reread is not None:
             command.extend(["--reread-reference", reread])
         return self.call(*command)
+
+    def observe(self, evidence, criterion="repro", platform="android", scenario="repro-submit",
+                outcome="not-reproduced", revision=None, run_id="run"):
+        return self.call("observe", run_id, "--criterion", criterion, "--platform", platform,
+                         "--scenario-key", scenario, "--outcome", outcome,
+                         "--evidence", evidence, "--source-revision", revision or self.head())
 
     def add_freeze_pass(self, platforms=("android",), evidence_type="command", task_type="feature",
                         criterion="main"):
@@ -779,6 +808,9 @@ class AutoDevGateTest(unittest.TestCase):
                                     "--evidence", evidence, "--source-revision", self.gate.head())
             self.gate.expect_denied("fail", "run", "--criterion", "main", "--platform", "android",
                                     "--evidence", evidence, "--source-revision", self.gate.head())
+            self.gate.expect_denied("observe", "run", "--criterion", "main", "--platform", "android",
+                                    "--scenario-key", "late", "--outcome", "not-reproduced",
+                                    "--evidence", evidence, "--source-revision", self.gate.head())
             self.gate.expect_denied("finish", "run", "--outcome", "blocked",
                                     "--source-revision", self.gate.head(), "--reason", "again")
             self.assertEqual(before, self.gate.snapshot_run())
@@ -831,6 +863,63 @@ class AutoDevGateTest(unittest.TestCase):
         self.gate.expect_denied("status", "run")
         self.gate.expect_denied("finish", "run", "--outcome", "blocked",
                                 "--source-revision", checked, "--reason", "legacy invalid")
+
+    def test_bug_observations_are_diagnostic_immutable_and_reported(self):
+        initial = self.gate.head()
+        self.gate.init(task_type="bug", platforms=["android"])
+        self.gate.add(criterion="repro", kind="repro", evidence_type="command", platforms=["android"])
+        self.gate.freeze()
+        invalid_time = self.gate.observation_evidence("bad-observation-time.json", revision=initial)
+        invalid_time_path = self.gate.artifacts() / "bad-observation-time.json"
+        invalid_time_data = json.loads(invalid_time_path.read_text(encoding="utf-8"))
+        invalid_time_data["timestamp"] = "2026-09-05T12:00:00+00:00"
+        invalid_time_path.write_text(json.dumps(invalid_time_data), encoding="utf-8")
+        self.gate.expect_denied("observe", "run", "--criterion", "repro", "--platform", "android",
+                                "--scenario-key", "repro-submit", "--outcome", "not-reproduced",
+                                "--evidence", invalid_time, "--source-revision", initial)
+        malformed = self.gate.observation_evidence("bad-observation.json", revision=initial)
+        malformed_path = self.gate.artifacts() / "bad-observation.json"
+        malformed_data = json.loads(malformed_path.read_text(encoding="utf-8"))
+        malformed_data["exitCode"] = 1
+        malformed_path.write_text(json.dumps(malformed_data), encoding="utf-8")
+        self.gate.expect_denied("observe", "run", "--criterion", "repro", "--platform", "android",
+                                "--scenario-key", "repro-submit", "--outcome", "not-reproduced",
+                                "--evidence", malformed, "--source-revision", initial)
+        self.assertEqual(0, self.gate.observation_count())
+
+        observations = (
+            ("not-reproduced", "selector was absent"),
+            ("environment-blocked", "emulator service unavailable"),
+            ("diagnostic-error", "instrumentation crashed"),
+        )
+        for index, (outcome, diagnostic) in enumerate(observations):
+            evidence = self.gate.observation_evidence(
+                "observation-%s.json" % index, revision=initial, outcome=outcome,
+                diagnostic=diagnostic)
+            recorded = self.gate.observe(evidence, outcome=outcome, revision=initial)
+            self.assertEqual(outcome, recorded["observation"]["outcome"])
+        status = self.gate.call("status", "run")
+        self.assertEqual("missing", status["matrix"][0]["result"])
+        self.assertEqual(3, len(status["observations"]))
+        self.assertEqual("instrumentation crashed",
+                         status["observations"][-1]["evidenceMetadata"]["diagnostic"])
+
+        later = self.gate.commit_source("later diagnostic")
+        later_evidence = self.gate.observation_evidence("later-observation.json", revision=later)
+        self.gate.expect_denied("observe", "run", "--criterion", "repro", "--platform", "android",
+                                "--scenario-key", "repro-submit", "--outcome", "not-reproduced",
+                                "--evidence", later_evidence, "--source-revision", later)
+        self.assertEqual(3, self.gate.observation_count())
+
+        self.gate.call("finish", "run", "--outcome", "blocked", "--source-revision", later,
+                       "--reason", "diagnostic observations only")
+        report = (self.gate.artifacts() / "report.md").read_text(encoding="utf-8")
+        self.assertIn("## Bug reproduction observations", report)
+        self.assertIn("environment-blocked", report)
+        self.assertIn('diagnostic: "instrumentation crashed"', report)
+        recorded_path = self.gate.artifacts() / "observation-0.json"
+        recorded_path.write_text("{}", encoding="utf-8")
+        self.gate.expect_denied("status", "run")
 
     def test_bounded_scan_detects_growth_and_replacement_races(self):
         expected = {
@@ -885,6 +974,8 @@ class AutoDevGateTest(unittest.TestCase):
         self.gate.add(criterion="perf", evidence_type="metric", platforms=["android"])
         self.gate.freeze()
         baseline = self.gate.metric_evidence("baseline.json", revision=initial, value=10.0)
+        baseline_sha256 = hashlib.sha256(
+            (self.gate.artifacts() / "baseline.json").read_bytes()).hexdigest()
         self.gate.record("pass", baseline, criterion="perf", revision=initial,
                          phase="baseline", fingerprint="fixture-v1")
         candidate_revision = self.gate.commit_source("candidate")
@@ -903,8 +994,10 @@ class AutoDevGateTest(unittest.TestCase):
         comparison = status["attempts"][-1]["evidenceMetadata"]
         self.assertEqual(4.0, comparison["computedDelta"])
         self.assertEqual("pass", comparison["computedResult"])
+        self.assertEqual(baseline_sha256, comparison["baselineEvidenceSha256"])
         report = (self.gate.artifacts() / "report.md").read_text(encoding="utf-8")
         self.assertIn("computed decrease delta 4.0 absolute against minimum 2.0 (pass)", report)
+        self.assertIn("baselineEvidenceSha256 `%s`" % baseline_sha256, report)
 
     def test_perf_rejects_invalid_schema_provenance_and_self_asserted_result(self):
         initial = self.gate.head()

@@ -2,9 +2,9 @@
 
 ## Reproduce first
 
-Turn the report into a deterministic observation: preconditions, exact path, expected behavior, actual behavior, affected platform(s), and a stable assertion. Give the reproduction criterion a stable scenario key. Attempt reproduction on every requested platform at the manifest's initial source revision. Record immutable failing `baseline` evidence only where the failure actually reproduces; preserve structured non-reproduction attempts and diagnostics elsewhere rather than fabricating a failure.
+Turn the report into a deterministic observation: preconditions, exact path, expected behavior, actual behavior, affected platform(s), and a stable assertion. Give the reproduction criterion a stable scenario key. Attempt reproduction on every requested platform at the manifest's initial source revision. Record immutable failing `baseline` evidence only where the failure actually reproduces; use the checklist gate's `observe` command to preserve a structured `not-reproduced`, `environment-blocked`, or `diagnostic-error` result instead of fabricating a failure.
 
-If a required platform does not reproduce, inspect task facts, build/source revision, environment parity, persisted state, and selector contract. Retry only when a concrete mismatch justifies it. If the reported behavior still cannot be reproduced there, stop speculative implementation and report `blocked` or `failed` with the attempts and diagnostics. Do not guess a fix from symptoms alone.
+If a required platform does not reproduce, inspect task facts, build/source revision, environment parity, persisted state, and selector contract. Retry only when a concrete mismatch justifies it, appending each material diagnostic through `observe`. If the reported behavior still cannot be reproduced there, stop speculative implementation and report `blocked` or `failed`; its terminal report retains those observations. Do not guess a fix from symptoms alone.
 
 ## Fix and prove
 
