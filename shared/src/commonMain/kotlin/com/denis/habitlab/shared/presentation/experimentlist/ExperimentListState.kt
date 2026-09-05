@@ -24,7 +24,7 @@ data class ExperimentRowUiModel(
     val id: ExperimentId,
     val name: String,
     val status: ExperimentStatusUiModel,
-    val automationId: AutomationId = experimentListRowAutomationIdFor(id),
+    val automationId: AutomationId,
 )
 
 sealed interface Action {

@@ -1,0 +1,5 @@
+# Experiment Editor logic
+
+[`ExperimentEditorViewModel`](../../../../../../shared/src/commonMain/kotlin/com/denis/habitlab/shared/presentation/experimenteditor/ExperimentEditorViewModel.kt) starts ready for a null ID and observes a non-null draft. It ignores edits while saving or not ready, validates a non-empty name, creates for null, and updates only the existing draft for a matching non-null ID. An invalid or missing name sets validation state; only a missing projection emits the Gallery-return effect. Failed commands leave an error state.
+
+`MetricResultDelivered` changes the metric only for a selected result with the same nullable caller ID. [`MetricPickerViewModel`](../../../../../../shared/src/commonMain/kotlin/com/denis/habitlab/shared/presentation/metricpicker/MetricPickerViewModel.kt) resolves once; [`AppNavigator.handleEditorEffect`](../../../../../../shared/src/commonMain/kotlin/com/denis/habitlab/shared/app/Navigation3AppHost.kt) verifies the picker/result caller match before delivery. A successful save emits `SaveComplete(id)`: create replaces the editor with Details, while edit retains its parent stack relationship.

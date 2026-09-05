@@ -8,6 +8,7 @@ import com.denis.habitlab.shared.domain.observer.ExperimentListObservation
 import com.denis.habitlab.shared.domain.repository.StorageFailure
 import com.denis.habitlab.shared.domain.repository.StorageOperation
 import com.denis.habitlab.shared.presentation.model.ExperimentStatusUiModel
+import com.denis.habitlab.shared.presentation.ui.automation.AutomationId
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -16,15 +17,17 @@ class ExperimentListUiMapperTest {
     private val mapper = ExperimentListUiMapper()
 
     @Test
-    fun availableExperimentsKeepTheirTypedIdsAndBusinessStatusInListRows() {
-        val draftId = ExperimentId("draft-list001")
-        val activeId = ExperimentId("daily-movement")
+    fun availableExperimentsKeepTypedIdsBusinessStatusAndClosedAutomationIds() {
+        val generatedDraftId = ExperimentId("draft-list001")
+        val dailyMovementId = ExperimentId("daily-movement")
+        val sleepRoutineId = ExperimentId("sleep-routine")
 
         val mapped = mapper.map(
             ExperimentListObservation.Available(
                 listOf(
-                    ExperimentSummary(draftId, name("Draft habit"), ExperimentStatus.DRAFT),
-                    ExperimentSummary(activeId, name("Active habit"), ExperimentStatus.ACTIVE),
+                    ExperimentSummary(generatedDraftId, name("Draft habit"), ExperimentStatus.DRAFT),
+                    ExperimentSummary(dailyMovementId, name("Active habit"), ExperimentStatus.ACTIVE),
+                    ExperimentSummary(sleepRoutineId, name("Sleep habit"), ExperimentStatus.DRAFT),
                 ),
             ),
         )
@@ -32,8 +35,24 @@ class ExperimentListUiMapperTest {
         val content = assertIs<ContentUiModel.Available>(mapped.content)
         assertEquals(
             listOf(
-                ExperimentRowUiModel(draftId, "Draft habit", ExperimentStatusUiModel.DRAFT),
-                ExperimentRowUiModel(activeId, "Active habit", ExperimentStatusUiModel.ACTIVE),
+                ExperimentRowUiModel(
+                    id = generatedDraftId,
+                    name = "Draft habit",
+                    status = ExperimentStatusUiModel.DRAFT,
+                    automationId = AutomationId.ExperimentListRow,
+                ),
+                ExperimentRowUiModel(
+                    id = dailyMovementId,
+                    name = "Active habit",
+                    status = ExperimentStatusUiModel.ACTIVE,
+                    automationId = AutomationId.ExperimentListDailyMovementRow,
+                ),
+                ExperimentRowUiModel(
+                    id = sleepRoutineId,
+                    name = "Sleep habit",
+                    status = ExperimentStatusUiModel.DRAFT,
+                    automationId = AutomationId.ExperimentListSleepRoutineRow,
+                ),
             ),
             content.experiments,
         )

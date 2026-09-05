@@ -17,6 +17,10 @@ Each evidence record contains the platform, source revision, terminal success an
 
 For every listed supported platform, the node must contain a separate terminal-success, passing-gate evidence record. Do not list any platform without its own qualifying evidence.
 
+## Candidate records awaiting owner gate
+
+A candidate may preserve attributable platform evidence while the full owner gate is pending. It must say `Owner gate: pending; not yet admissible as terminal reusable memory`, retain its evidence facts, and be identified as a candidate in the index. It is not a node, cannot claim terminal success or a passing gate, and must be promoted only after the manager supplies the full passing-gate status.
+
 Nodes must not contain localized labels, runtime/user values, coordinates for app controls, credentials, absolute machine paths, timing guesses presented as guarantees, or copied owner policy. The only system-gesture coordinate exception must reference [ADR 0003](../../../../../docs/adr/0003-maestro-cross-platform-ui-automation.md).
 
-A node is evidence-backed guidance, not an executable flow or a claim that the current screen is reachable. Validate all IDs against the production automation contract before use. Create a node only after its separate Android and iOS evidence exists; this schema does not precreate records or alter the executable flow contract.
+A node is evidence-backed guidance, not an executable flow or a claim that the current screen is reachable. Validate all IDs against the production automation contract before use. Create a node only after its separate Android/iOS evidence and full owner gate pass; this schema does not alter the executable flow contract.
