@@ -1,0 +1,23 @@
+appId: com.denis.habitlab
+---
+# Start state: Experiment Details for the flow-created draft.
+- assertVisible:
+    id: habitlab.experiment-details.screen.root
+- tapOn:
+    id: habitlab.experiment-details.action.delete
+- extendedWaitUntil:
+    visible:
+      id: habitlab.confirm-delete.screen.root
+    timeout: 10000
+- assertVisible:
+    id: habitlab.confirm-delete.screen.root
+- tapOn:
+    id: habitlab.confirm-delete.action.cancel
+- extendedWaitUntil:
+    visible:
+      id: habitlab.experiment-details.screen.root
+    timeout: 10000
+- assertVisible:
+    id: habitlab.experiment-details.action.delete
+- assertVisible:
+    id: habitlab.experiment-details.screen.root

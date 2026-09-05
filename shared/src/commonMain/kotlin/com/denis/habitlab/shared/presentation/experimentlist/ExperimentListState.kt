@@ -3,6 +3,7 @@ package com.denis.habitlab.shared.presentation.experimentlist
 import androidx.compose.runtime.Immutable
 import com.denis.habitlab.shared.domain.model.ExperimentId
 import com.denis.habitlab.shared.presentation.model.ExperimentStatusUiModel
+import com.denis.habitlab.shared.presentation.ui.automation.AutomationId
 import kotlinx.collections.immutable.ImmutableList
 
 @Immutable
@@ -23,6 +24,7 @@ data class ExperimentRowUiModel(
     val id: ExperimentId,
     val name: String,
     val status: ExperimentStatusUiModel,
+    val automationId: AutomationId = experimentListRowAutomationIdFor(id),
 )
 
 sealed interface Action {

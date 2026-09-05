@@ -1,0 +1,23 @@
+appId: com.denis.habitlab
+---
+# Start state: an unsaved Experiment Editor.
+- assertVisible:
+    id: habitlab.experiment-editor.screen.root
+- tapOn:
+    id: habitlab.experiment-editor.action.metric
+- extendedWaitUntil:
+    visible:
+      id: habitlab.metric-picker.screen.root
+    timeout: 10000
+- assertVisible:
+    id: habitlab.metric-picker.screen.root
+- tapOn:
+    id: habitlab.metric-picker.action.energy
+- extendedWaitUntil:
+    visible:
+      id: habitlab.experiment-editor.state.metric.daily-energy
+    timeout: 10000
+- assertVisible:
+    id: habitlab.experiment-editor.state.metric.daily-energy
+- assertVisible:
+    id: habitlab.experiment-editor.screen.root

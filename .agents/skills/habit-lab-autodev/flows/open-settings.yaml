@@ -1,0 +1,13 @@
+appId: com.denis.habitlab
+---
+# Start state: Experiment List.
+- assertVisible:
+    id: habitlab.experiment-list.screen.root
+- tapOn:
+    id: habitlab.experiment-list.action.open-settings
+- extendedWaitUntil:
+    visible:
+      id: habitlab.settings.screen.root
+    timeout: 10000
+- assertVisible:
+    id: habitlab.settings.screen.root
