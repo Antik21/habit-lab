@@ -29,3 +29,4 @@ Choose the matching row and read only its 1–3 linked documents.
 | ios-adapter | iOS host/native adapter → [boundaries](.agents/docs/02-architecture-boundaries.md) · [iOS policy](.agents/docs/06-platform-ios.md) · [recipe](.agents/docs/09-common-cases.md) |
 | dependency-toolchain | Dependency or toolchain → [toolchain](.agents/docs/01-stack-toolchain.md) · [libraries/licenses](.agents/docs/08-libraries-licenses.md) |
 | tests-verification | Tests, CI, or release verification → [testing policy](.agents/docs/07-testing-verification.md) |
+| autodev | Explicit autonomous implementation plus emulator/simulator verification → [AutoDev skill](.agents/skills/habit-lab-autodev/SKILL.md) · [toolchain](.agents/docs/01-stack-toolchain.md) · [testing policy](.agents/docs/07-testing-verification.md) |

@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+
+if [[ "$#" == 1 && "$1" == "-version" ]]; then
+    selected_version="${STUB_XCODE_VERSION:?}"
+    if [[ -n "${STUB_XCODE_VERSION_COUNT_FILE:-}" ]]; then
+        count=""
+        if [[ -f "$STUB_XCODE_VERSION_COUNT_FILE" ]]; then
+            IFS= read -r count <"$STUB_XCODE_VERSION_COUNT_FILE" || true
+        fi
+        count="${count:-0}"
+        [[ "$count" =~ ^[0-9]+$ ]] || count=0
+        (( count += 1 ))
+        printf '%s\n' "$count" >"$STUB_XCODE_VERSION_COUNT_FILE"
+        if (( count > 1 )); then
+            selected_version="${STUB_XCODE_VERSION_AFTER:?}"
+        fi
+    fi
+    printf 'Xcode %s\nBuild version Stub\n' "$selected_version"
+    exit 0
+fi
+
+printf 'developer_dir=%s xcodebuild %s\n' "${DEVELOPER_DIR:?}" "$*" >>"${STUB_OPERATION_LOG:?}"
+
+derived_data=""
+while (( $# > 0 )); do
+    if [[ "$1" == "-derivedDataPath" && $# -ge 2 ]]; then
+        derived_data="$2"
+        shift 2
+    else
+        shift
+    fi
+done
+if [[ -n "$derived_data" ]]; then
+    mkdir -p "$derived_data/Build/Products/Debug-iphonesimulator/iosApp.app"
+fi
+
+exit "${STUB_XCODEBUILD_EXIT:-0}"

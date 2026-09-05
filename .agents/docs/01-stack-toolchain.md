@@ -24,9 +24,10 @@ Cross-platform UI automation uses the external Maestro CLI pinned to 2.6.1; it r
 xcodebuild -project iosApp/iosApp.xcodeproj -scheme iosApp -sdk iphonesimulator -configuration Debug CODE_SIGNING_ALLOWED=NO build
 ./ui-tests/maestro/run.sh android <device-id> [run-id]
 ./ui-tests/maestro/run.sh ios <device-id> [run-id]
+./ui-tests/maestro/tests/xcode-preflight-test.sh
 ```
 
-`:shared:check` includes architecture and documentation checks. Android device tests require one API 33+ device; CI uses an API 36 Google APIs x86_64 emulator. Run `:shared:iosSimulatorArm64Test` on Apple Silicon and `:shared:iosX64Test` on Intel macOS, where that target is configured. See [testing and verification](07-testing-verification.md) before choosing a subset.
+`:shared:check` includes architecture and documentation checks, plus the Maestro shell contract check on non-Windows hosts when Bash is available. Native Windows and hosts without Bash skip that shell-only task and do not establish its coverage. Android device tests require one API 33+ device; CI uses an API 36 Google APIs x86_64 emulator. Run `:shared:iosSimulatorArm64Test` on Apple Silicon and `:shared:iosX64Test` on Intel macOS, where that target is configured. See [testing and verification](07-testing-verification.md) before choosing a subset.
 
 The Maestro runner owns CLI invocation and targets `ui-tests/maestro/flows/reference-screens.yaml`; `ui-tests/maestro/config.yaml` is its shared configuration. Platform-only system gestures live under `ui-tests/maestro/flows/platform/`. The runner and flows are repository files, while the CLI remains external.
 

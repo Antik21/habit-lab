@@ -1,4 +1,5 @@
 import com.denis.habitlab.buildlogic.CheckDocumentationTask
+import java.io.File
 
 plugins {
     alias(libs.plugins.android.application) apply false
@@ -22,4 +23,30 @@ val checkDocumentation = tasks.register<CheckDocumentationTask>("checkDocumentat
     )
     factOwnersFile.set(layout.projectDirectory.file("docs/fact-owners.tsv"))
     budgetsFile.set(layout.projectDirectory.file("docs/document-budgets.tsv"))
+}
+
+val isNativeWindows = System.getProperty("os.name").startsWith("Windows", ignoreCase = true)
+val bashExecutable = if (isNativeWindows) {
+    null
+} else {
+    System.getenv("PATH")
+        ?.split(File.pathSeparatorChar)
+        ?.asSequence()
+        ?.map { entry -> File(entry.ifEmpty { "." }, "bash") }
+        ?.firstOrNull { candidate -> candidate.isFile && candidate.canExecute() }
+        ?.canonicalPath
+}
+
+val checkMaestroShell = tasks.register<Exec>("checkMaestroShell") {
+    group = "verification"
+    enabled = !isNativeWindows && bashExecutable != null
+    description = when {
+        isNativeWindows -> "Skipped on native Windows; the Maestro shell contract requires Bash."
+        bashExecutable == null -> "Skipped because Bash is unavailable; Maestro shell coverage is not established."
+        else -> "Checks the Maestro Xcode preflight and pinned runner selection."
+    }
+    if (!isNativeWindows && bashExecutable != null) {
+        commandLine(bashExecutable, "ui-tests/maestro/tests/xcode-preflight-test.sh")
+    }
+    workingDir(layout.projectDirectory)
 }
