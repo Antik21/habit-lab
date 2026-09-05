@@ -11,9 +11,10 @@ kotlin = "2.4.10"
 koin = "4.2.2"
 multiplatform-nav3-ui = "1.1.1"
 kotlinx-serialization = "1.9.0"
-coroutines = "1.9.0"
+coroutines = "1.10.2"
 jetbrains-lifecycle = "2.11.0-beta01"
 orbit = "11.0.0"
+turbine = "1.2.1"
 ksp = "2.3.11"
 room3 = "3.0.2"
 sqlite = "2.7.0"
@@ -34,6 +35,7 @@ koin-compose-viewmodel = { module = "io.insert-koin:koin-compose-viewmodel", ver
 koin-core = { module = "io.insert-koin:koin-core", version.ref = "koin" }
 jetbrains-navigation3-ui = { module = "org.jetbrains.androidx.navigation3:navigation3-ui", version.ref = "multiplatform-nav3-ui" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
+kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
 kotlinx-serialization-core = { module = "org.jetbrains.kotlinx:kotlinx-serialization-core", version.ref = "kotlinx-serialization" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
 jetbrains-lifecycle-runtime-compose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose", version.ref = "jetbrains-lifecycle" }
@@ -42,6 +44,8 @@ jetbrains-lifecycle-viewmodel-navigation3 = { module = "org.jetbrains.androidx.l
 orbit-core = { module = "org.orbit-mvi:orbit-core", version.ref = "orbit" }
 orbit-viewmodel = { module = "org.orbit-mvi:orbit-viewmodel", version.ref = "orbit" }
 orbit-compose = { module = "org.orbit-mvi:orbit-compose", version.ref = "orbit" }
+orbit-test = { module = "org.orbit-mvi:orbit-test", version.ref = "orbit" }
+turbine = { module = "app.cash.turbine:turbine", version.ref = "turbine" }
 kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinx-datetime" }
 kotlinx-collections-immutable = { module = "org.jetbrains.kotlinx:kotlinx-collections-immutable", version.ref = "kotlinx-collections-immutable" }
 androidx-room3-runtime = { module = "androidx.room3:room3-runtime", version.ref = "room3" }

@@ -22,6 +22,7 @@ import com.denis.habitlab.shared.domain.repository.EditDraftResult
 import com.denis.habitlab.shared.domain.repository.RecordDailyCheckInResult
 import com.denis.habitlab.shared.domain.repository.StorageFailure
 import com.denis.habitlab.shared.domain.repository.StorageOperation
+import app.cash.turbine.test
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
@@ -41,6 +42,86 @@ import kotlin.test.assertTrue
 import kotlin.time.Instant
 
 class RoomExperimentStoreTest {
+    @Test
+    fun activeRoomObserversPublishEveryLocalWriteIncludingCheckInReplacementAndDeletionMissingness() = runBlocking {
+        val database = inMemoryDatabase()
+        try {
+            val source = RoomExperimentLocalDataSource(database)
+            val repository = RoomExperimentRepository(source)
+            val observers = RoomExperimentObservers(
+                localDataSource = source,
+                databaseReadiness = DatabaseReadiness(DatabaseReadinessState.Ready),
+            )
+            val draft = draft(id = "draft-observer1", name = "Initial name")
+            val date = LocalDate.parse("2026-01-03")
+            val renamed = requireNotNull(ExperimentName.fromInput("Renamed locally"))
+            val performed = performedCheckIn(draft.id, date)
+            val skipped = DailyCheckIn(
+                experimentId = draft.id,
+                localDate = date,
+                outcome = CheckInOutcome.Skipped,
+                recordedAt = recordedAt("2026-01-03T10:02:00Z", date),
+            )
+
+            observers.observeAll().test {
+                val listEvents = this
+                assertEquals(emptyList(), assertIs<ExperimentListObservation.Available>(awaitItem()).experiments)
+
+                assertEquals(CreateDraftResult.Created(draft), repository.createDraft(draft))
+                assertEquals(
+                    listOf(draft.id),
+                    assertIs<ExperimentListObservation.Available>(awaitItem()).experiments.map { it.id },
+                )
+
+                observers.observe(draft.id).test {
+                    val projectionEvents = this
+                    assertEquals(
+                        "Initial name",
+                        assertIs<ExperimentProjectionObservation.Available>(awaitItem()).projection.displayName,
+                    )
+
+                    assertEquals(
+                        EditDraftResult.Updated(draft.id),
+                        repository.editDraft(draft.id, renamed, recordedAt("2026-01-03T10:01:00Z", date)),
+                    )
+                    assertEquals(
+                        renamed.value,
+                        assertIs<ExperimentProjectionObservation.Available>(awaitItem()).projection.displayName,
+                    )
+                    assertEquals(
+                        renamed.value,
+                        assertIs<ExperimentListObservation.Available>(listEvents.awaitItem())
+                            .experiments
+                            .single()
+                            .name
+                            .value,
+                    )
+
+                    observers.observe(draft.id, date).test {
+                        assertEquals(DailyCheckInObservation.Missing, awaitItem())
+
+                        assertEquals(RecordDailyCheckInResult.Recorded(performed), repository.recordDailyCheckIn(performed))
+                        assertEquals(DailyCheckInObservation.Available(performed), awaitItem())
+
+                        assertEquals(RecordDailyCheckInResult.Recorded(skipped), repository.recordDailyCheckIn(skipped))
+                        assertEquals(DailyCheckInObservation.Available(skipped), awaitItem())
+
+                        assertEquals(DeleteExperimentResult.Deleted(draft.id), repository.deleteExperiment(draft.id))
+                        assertEquals(DailyCheckInObservation.Missing, awaitItem())
+                        assertEquals(ExperimentProjectionObservation.Missing, projectionEvents.awaitItem())
+                        assertEquals(
+                            emptyList(),
+                            assertIs<ExperimentListObservation.Available>(listEvents.awaitItem())
+                                .experiments,
+                        )
+                    }
+                }
+            }
+        } finally {
+            database.close()
+        }
+    }
+
     @Test
     fun writesReturnTypedResultsAndObserversReadTheSameRoomState() = runBlocking {
         val database = inMemoryDatabase()
@@ -324,6 +405,19 @@ class RoomExperimentStoreTest {
             updatedAt = timestamp,
         )
     }
+
+    private fun performedCheckIn(experimentId: ExperimentId, date: LocalDate): DailyCheckIn = DailyCheckIn(
+        experimentId = experimentId,
+        localDate = date,
+        outcome = CheckInOutcome.Performed(
+            OccurredAt(
+                utcInstant = Instant.parse("2026-01-03T09:30:00Z"),
+                originalOffset = UtcOffset.ZERO,
+                localDate = date,
+            ),
+        ),
+        recordedAt = recordedAt("2026-01-03T10:00:00Z", date),
+    )
 
     private fun recordedAt(instant: String, localDate: LocalDate): RecordedAt = RecordedAt(
         utcInstant = Instant.parse(instant),
