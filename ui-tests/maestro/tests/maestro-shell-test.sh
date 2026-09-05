@@ -6,3 +6,4 @@ readonly TEST_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
 "$BASH" "$TEST_DIR/navigation-flows-test.sh"
 "$BASH" "$TEST_DIR/xcode-preflight-test.sh"
+python3 "$TEST_DIR/autodev-gate-test.py"

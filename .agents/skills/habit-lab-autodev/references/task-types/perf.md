@@ -2,7 +2,7 @@
 
 ## Establish the baseline
 
-For each requested platform, define a user-relevant metric, measurement boundary, workload/state, warm-up policy, sample count, device/runtime configuration, build mode, and acceptance threshold before optimization. Capture a separate baseline on every requested emulator/simulator without changing those conditions.
+For each requested platform, define a user-relevant metric, measurement boundary, workload/state, warm-up policy, sample count, device/runtime configuration, build mode, acceptance threshold, and stable scenario fingerprint before optimization. Capture a separate `baseline` event through the [checklist gate](../checklist-gate.md) at the immutable manifest initial revision on every requested emulator/simulator without changing those conditions.
 
 If the environment cannot produce a stable, attributable baseline, report `blocked` or `failed`; do not optimize from anecdotes, a single incomparable run, or unrelated profiler output.
 
@@ -10,6 +10,6 @@ If the environment cannot produce a stable, attributable baseline, report `block
 
 Locate the owning bottleneck with measurements, then make the smallest causal production change. Keep functional acceptance and regression assertions frozen alongside the performance target.
 
-On every requested platform, compare its before/after metric using the same source-independent workload, build mode, virtual target class/runtime, state, metric definition, instrumentation, and aggregation. Record raw evidence, summarized delta, threshold, and pass/fail result per platform. Explain any unavoidable variance or environment change; if it invalidates a platform comparison, do not claim improvement there.
+On every requested platform, compare its before/after metric using the same scenario fingerprint, source-independent workload, build mode, virtual target class/runtime, state, metric definition, instrumentation, and aggregation. Record separate `candidate` or `repeat` evidence, summarized delta, threshold, and pass/fail result per platform. Baseline-only evidence never passes the criterion. Explain unavoidable variance; if it invalidates a comparison, do not claim improvement there.
 
 Success requires the before/after comparison to meet its threshold on every requested platform, functional evidence on every requested platform, the owner gate, and independent review. Do not trade correctness, persistence, accessibility, or cross-platform behavior for an unproven metric gain.

@@ -1,0 +1,662 @@
+#!/usr/bin/env python3
+"""Hermetic black-box contracts for the AutoDev frozen-checklist gate."""
+
+from __future__ import print_function
+
+import hashlib
+import json
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+import time
+import unittest
+
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+GATE = REPOSITORY_ROOT / ".agents/skills/habit-lab-autodev/scripts/autodev_gate.py"
+MAX_SCAN_BYTES = 64 * 1024 * 1024
+TIMESTAMP = "2026-09-05T12:00:00Z"
+
+
+def canonical_digest(value):
+    data = json.dumps(value, sort_keys=True, separators=(",", ":"),
+                      ensure_ascii=True).encode("utf-8")
+    return hashlib.sha256(data).hexdigest()
+
+
+class GateHarness(object):
+    def __init__(self):
+        self.temporary = tempfile.TemporaryDirectory(prefix="habitlab-den19-gate-")
+        self.root = Path(self.temporary.name)
+        self.git("init", "-q")
+        self.git("config", "user.email", "qa@example.invalid")
+        self.git("config", "user.name", "Gate QA")
+        (self.root / ".gitignore").write_text(".autodev/\n", encoding="utf-8")
+        (self.root / "source.txt").write_text("initial\n", encoding="utf-8")
+        self.git("add", ".gitignore", "source.txt")
+        self.git("commit", "-qm", "initial")
+
+    def close(self):
+        self.temporary.cleanup()
+
+    def git(self, *args):
+        return subprocess.run(["git"] + list(args), cwd=str(self.root), check=True,
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                              text=True).stdout.strip()
+
+    def head(self):
+        return self.git("rev-parse", "HEAD")
+
+    def commit_source(self, value):
+        (self.root / "source.txt").write_text(value + "\n", encoding="utf-8")
+        self.git("add", "source.txt")
+        self.git("commit", "-qm", value)
+        return self.head()
+
+    def call(self, *args, **kwargs):
+        expected = kwargs.pop("expected", 0)
+        if kwargs:
+            raise AssertionError("unexpected call kwargs: %r" % kwargs)
+        result = subprocess.run(
+            [sys.executable, str(GATE)] + list(args), cwd=str(self.root), text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
+        )
+        stream = result.stdout if result.returncode == 0 else result.stderr
+        lines = [line for line in stream.splitlines() if line]
+        if result.returncode != expected:
+            raise AssertionError("gate exit %s, expected %s\nstdout=%s\nstderr=%s" % (
+                result.returncode, expected, result.stdout, result.stderr))
+        if len(lines) != 1:
+            raise AssertionError("gate did not emit one JSON object: %r" % stream)
+        try:
+            payload = json.loads(lines[0])
+        except ValueError as exc:
+            raise AssertionError("gate output is not JSON: %r" % stream) from exc
+        if not isinstance(payload, dict):
+            raise AssertionError("gate output is not an object: %r" % payload)
+        if result.returncode != 0:
+            if "Traceback" in result.stdout or "Traceback" in result.stderr:
+                raise AssertionError("gate exposed a traceback")
+            if payload.get("ok") is not False:
+                raise AssertionError("error response is not fail-closed: %r" % payload)
+        return payload
+
+    def expect_denied(self, *args):
+        result = subprocess.run(
+            [sys.executable, str(GATE)] + list(args), cwd=str(self.root), text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
+        )
+        if result.returncode == 0:
+            raise AssertionError("expected denied command to fail: %s" % (args,))
+        stream = result.stderr
+        lines = [line for line in stream.splitlines() if line]
+        if len(lines) != 1 or "Traceback" in stream:
+            raise AssertionError("denial was not one JSON error: %s" % stream)
+        payload = json.loads(lines[0])
+        if payload.get("ok") is not False:
+            raise AssertionError("denial was not fail closed: %r" % payload)
+        return payload
+
+    def init(self, run_id="run", task_type="feature", platforms=None):
+        command = ["init", run_id, "--task-id", "DEN-19", "--task-type", task_type,
+                   "--source-revision", self.head(), "--blast-radius", "gate"]
+        for platform in platforms or []:
+            command.extend(["--platform", platform])
+        return self.call(*command)
+
+    def state(self, run_id="run"):
+        return self.root / ".autodev/state" / run_id
+
+    def artifacts(self, run_id="run"):
+        return self.root / ".autodev/artifacts" / run_id
+
+    def relative_artifact(self, name, run_id="run"):
+        return ".autodev/artifacts/%s/%s" % (run_id, name)
+
+    def write_json(self, name, value, run_id="run"):
+        path = self.artifacts(run_id) / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(value, sort_keys=True), encoding="utf-8")
+        return self.relative_artifact(name, run_id)
+
+    def command_evidence(self, name, criterion="main", platform="android", result="pass",
+                         revision=None, command="./gradlew check", run_id="run"):
+        return self.write_json(name, {
+            "schemaVersion": 1,
+            "kind": "command-evidence",
+            "sourceRevision": revision or self.head(),
+            "timestamp": TIMESTAMP,
+            "platform": platform,
+            "criterionId": criterion,
+            "result": result,
+            "exitCode": 0 if result == "pass" else 1,
+            "command": command,
+        }, run_id)
+
+    def metric_evidence(self, name, criterion="perf", platform="android", result="pass",
+                        phase="baseline", fingerprint="fixture-v1", revision=None):
+        return self.write_json(name, {
+            "schemaVersion": 1,
+            "kind": "metric-evidence",
+            "sourceRevision": revision or self.head(),
+            "timestamp": TIMESTAMP,
+            "platform": platform,
+            "criterionId": criterion,
+            "result": result,
+            "phase": phase,
+            "scenarioFingerprint": fingerprint,
+            "metricName": "duration",
+            "value": 12.5,
+            "unit": "ms",
+        })
+
+    def junit_evidence(self, name, criterion="main", platform="android", result="pass",
+                       revision=None):
+        failures = "0" if result == "pass" else "1"
+        tests = "1"
+        xml = ("<testsuite tests=\"%s\" failures=\"%s\" errors=\"0\" skipped=\"0\">"
+               "<properties>"
+               "<property name=\"autodev.sourceRevision\" value=\"%s\"/>"
+               "<property name=\"autodev.platform\" value=\"%s\"/>"
+               "<property name=\"autodev.criterionId\" value=\"%s\"/>"
+               "<property name=\"autodev.result\" value=\"%s\"/>"
+               "</properties></testsuite>") % (
+                   tests, failures, revision or self.head(), platform, criterion, result)
+        path = self.artifacts() / name
+        path.write_text(xml, encoding="utf-8")
+        return self.relative_artifact(name)
+
+    def add(self, criterion="main", kind="main", evidence_type="command", platforms=None,
+            reason=None, run_id="run"):
+        command = ["add", run_id, "--criterion-id", criterion, "--text", "contract %s" % criterion,
+                   "--kind", kind, "--evidence-type", evidence_type]
+        for platform in platforms or []:
+            command.extend(["--platform", platform])
+        if reason is not None:
+            command.extend(["--reason", reason])
+        return self.call(*command)
+
+    def freeze(self, run_id="run"):
+        return self.call("freeze", run_id)
+
+    def record(self, result, evidence, criterion="main", platform="android", revision=None,
+               phase=None, scenario=None, fingerprint=None, hypothesis=None, reread=None,
+               run_id="run"):
+        command = [result, run_id, "--criterion", criterion, "--platform", platform,
+                   "--evidence", evidence, "--source-revision", revision or self.head()]
+        if phase is not None:
+            command.extend(["--phase", phase])
+        if scenario is not None:
+            command.extend(["--scenario-key", scenario])
+        if fingerprint is not None:
+            command.extend(["--scenario-fingerprint", fingerprint])
+        if hypothesis is not None:
+            command.extend(["--hypothesis", hypothesis])
+        if reread is not None:
+            command.extend(["--reread-reference", reread])
+        return self.call(*command)
+
+    def add_freeze_pass(self, platforms=("android",), evidence_type="command", task_type="feature",
+                        criterion="main"):
+        self.init(task_type=task_type, platforms=list(platforms))
+        self.add(criterion=criterion, evidence_type=evidence_type, platforms=list(platforms))
+        self.freeze()
+        if evidence_type == "junit":
+            evidence = self.junit_evidence("proof.xml", criterion=criterion)
+        else:
+            evidence = self.command_evidence("proof.json", criterion=criterion)
+        for platform in platforms:
+            if evidence_type == "junit":
+                evidence = self.junit_evidence("proof-%s.xml" % platform, criterion=criterion,
+                                              platform=platform)
+            else:
+                evidence = self.command_evidence("proof-%s.json" % platform, criterion=criterion,
+                                                 platform=platform)
+            self.record("pass", evidence, criterion=criterion, platform=platform)
+
+    def receipt(self, name, kind, revision=None, status="pass", platforms=None, **extra):
+        value = {
+            "schemaVersion": 1,
+            "kind": kind,
+            "sourceRevision": revision or self.head(),
+            "timestamp": TIMESTAMP,
+            "status": status,
+        }
+        if kind in ("build", "test"):
+            value.update({"command": "./gradlew %s" % kind,
+                          "exitCode": 0 if status == "pass" else 1,
+                          "platforms": platforms or ["android"]})
+        elif kind == "memory":
+            value.update({"read": ["AGENTS.md"], "written": [],
+                          "lint": {"command": "./gradlew checkDocumentation",
+                                   "status": "pass", "exitCode": 0}})
+        elif kind == "review":
+            value.update({"independent": True, "reviewedRevision": revision or self.head(),
+                          "unresolvedJustifiedFindings": 0,
+                          "lateRegressionDigest": canonical_digest([])})
+        elif kind == "cleanup":
+            value.update({"residualScratch": [], "forbiddenHooks": [],
+                          "secretScan": {"status": "pass", "findings": 0,
+                                         "checkedPaths": [], "allowlistedPaths": [],
+                                         "coverage": "fixture bounded scan"}})
+        value.update(extra)
+        return self.write_json(name, value)
+
+    def successful_finish(self, platforms=("android",), late_digest=None):
+        revision = self.head()
+        build = self.receipt("build.json", "build", revision, platforms=list(platforms))
+        test = self.receipt("test.json", "test", revision, platforms=list(platforms))
+        memory = self.receipt("memory.json", "memory", revision)
+        review_extra = {"lateRegressionDigest": late_digest or canonical_digest([])}
+        review = self.receipt("review.json", "review", revision, **review_extra)
+        cleanup = self.receipt("cleanup.json", "cleanup", revision)
+        return self.call("finish", "run", "--outcome", "success", "--source-revision", revision,
+                         "--build-receipt", build, "--test-receipt", test,
+                         "--memory-receipt", memory, "--review-receipt", review,
+                         "--cleanup-receipt", cleanup)
+
+
+class AutoDevGateTest(unittest.TestCase):
+    def setUp(self):
+        self.gate = GateHarness()
+
+    def tearDown(self):
+        self.gate.close()
+
+    def test_init_is_exclusive_and_platform_selection_is_closed(self):
+        default = self.gate.init("default")
+        self.assertEqual(["android", "ios"], default["manifest"]["requestedPlatforms"])
+        self.gate.expect_denied("init", "default", "--task-id", "DEN-19", "--task-type", "feature",
+                                "--source-revision", self.gate.head(), "--blast-radius", "gate")
+        explicit = self.gate.init("android-only", platforms=["android"])
+        self.assertEqual(["android"], explicit["manifest"]["requestedPlatforms"])
+        self.gate.expect_denied("init", "invalid/id", "--task-id", "DEN-19", "--task-type", "feature",
+                                "--source-revision", self.gate.head(), "--blast-radius", "gate")
+
+    def test_concurrent_init_has_one_owner_and_no_reused_run(self):
+        command = [sys.executable, str(GATE), "init", "race", "--task-id", "DEN-19",
+                   "--task-type", "feature", "--source-revision", self.gate.head(),
+                   "--blast-radius", "gate"]
+        first = subprocess.Popen(command, cwd=str(self.gate.root), text=True,
+                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        second = subprocess.Popen(command, cwd=str(self.gate.root), text=True,
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        results = [first.communicate(), second.communicate()]
+        codes = [first.returncode, second.returncode]
+        self.assertEqual(1, sum(code == 0 for code in codes))
+        for code, (stdout, stderr) in zip(codes, results):
+            payload = json.loads((stdout if code == 0 else stderr).strip())
+            self.assertIsInstance(payload, dict)
+        self.assertTrue((self.gate.state("race") / "owner.json").is_file())
+        self.assertTrue((self.gate.artifacts("race")).is_dir())
+
+    def test_manifest_and_freeze_tampering_are_fail_closed(self):
+        for target in ("manifest", "core", "core-delete", "freeze", "anchor"):
+            if target != "manifest":
+                self.gate.close()
+                self.gate = GateHarness()
+            self.gate.init(platforms=["android"])
+            self.gate.add(platforms=["android"])
+            self.gate.freeze()
+            if target == "manifest":
+                path = self.gate.state() / "manifest.json"
+                path.write_bytes(b"{}")
+            elif target == "core":
+                path = self.gate.state() / "criteria/000001.json"
+                path.write_bytes(b"{}")
+            elif target == "core-delete":
+                (self.gate.state() / "criteria/000001.json").unlink()
+            elif target == "freeze":
+                path = self.gate.state() / "freeze.json"
+                path.write_bytes(b"{}")
+            else:
+                path = next((self.gate.state() / "anchors/criteria").iterdir())
+                path.write_bytes(b"{}")
+            self.gate.expect_denied("status", "run")
+
+    def test_manifest_tamper_of_platform_lease_and_source_is_rejected(self):
+        for field, replacement in (("requestedPlatforms", ["android", "android"]),
+                                   ("deviceLeases", ["leased-device"]),
+                                   ("sourceRevision", "not-a-revision")):
+            if field != "requestedPlatforms":
+                self.gate.close()
+                self.gate = GateHarness()
+            self.gate.init()
+            manifest_path = self.gate.state() / "manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest[field] = replacement
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            self.gate.expect_denied("status", "run")
+
+    def test_reanchored_unsafe_manifest_fields_still_fail_schema_validation(self):
+        for field, replacement in (("schemaVersion", 2),
+                                   ("requestedPlatforms", ["android", "android"]),
+                                   ("deviceLeases", ["unreleased"]),
+                                   ("sourceRevision", "not-a-revision")):
+            if field != "schemaVersion":
+                self.gate.close()
+                self.gate = GateHarness()
+            self.gate.init()
+            manifest_path = self.gate.state() / "manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest[field] = replacement
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            (self.gate.state() / "manifest.anchor").write_text(
+                json.dumps({"manifestDigest": canonical_digest(manifest)}), encoding="utf-8")
+            self.gate.expect_denied("status", "run")
+
+    def test_add_freeze_and_late_regressions_preserve_the_core(self):
+        self.gate.init(platforms=["android"])
+        self.gate.expect_denied("freeze", "run")
+        self.gate.add()
+        self.gate.freeze()
+        self.gate.expect_denied("add", "run", "--criterion-id", "other", "--text", "other",
+                                "--kind", "main", "--evidence-type", "command")
+        self.gate.expect_denied("add", "run", "--criterion-id", "regression", "--text", "late",
+                                "--kind", "regression", "--evidence-type", "command")
+        late = self.gate.add("regression", kind="regression", reason="new regression")
+        self.assertTrue(late["reviewInvalidated"])
+        status = self.gate.call("status", "run")
+        self.assertEqual(2, len(status["matrix"]))
+        self.assertNotEqual(canonical_digest([]), status["lateRegressionDigest"])
+
+    def test_evidence_paths_and_closed_structured_proofs_are_rejected(self):
+        self.gate.init()
+        self.gate.add(evidence_type="command", platforms=["android"])
+        self.gate.freeze()
+        bad = self.gate.artifacts() / "bad.json"
+        bad.write_text("true", encoding="utf-8")
+        paths = [
+            "https://example.invalid/proof.json",
+            "/tmp/proof.json",
+            "../proof.json",
+            "build/maestro/foreign/proof.json",
+            ".autodev/artifacts/foreign/proof.json",
+            self.gate.relative_artifact("bad.json"),
+        ]
+        for path in paths:
+            self.gate.expect_denied("pass", "run", "--criterion", "main", "--platform", "android",
+                                    "--evidence", path, "--source-revision", self.gate.head())
+        target = self.gate.artifacts() / "target.json"
+        target.write_text("{}", encoding="utf-8")
+        link = self.gate.artifacts() / "link.json"
+        link.symlink_to(target.name)
+        self.gate.expect_denied("pass", "run", "--criterion", "main", "--platform", "android",
+                                "--evidence", self.gate.relative_artifact("link.json"),
+                                "--source-revision", self.gate.head())
+
+    def test_junit_and_command_semantics_and_status_revalidation(self):
+        self.gate.init()
+        self.gate.add(evidence_type="junit", platforms=["android"])
+        self.gate.freeze()
+        invalid = self.gate.junit_evidence("invalid.xml")
+        (self.gate.artifacts() / "invalid.xml").write_text(
+            "<testsuite tests=\"0\" failures=\"0\" errors=\"0\" skipped=\"0\"/>",
+            encoding="utf-8")
+        self.gate.expect_denied("pass", "run", "--criterion", "main", "--platform", "android",
+                                "--evidence", invalid, "--source-revision", self.gate.head())
+        valid = self.gate.junit_evidence("valid.xml")
+        self.gate.record("pass", valid)
+        self.gate.call("status", "run")
+        (self.gate.artifacts() / "valid.xml").write_text("<testsuite/>", encoding="utf-8")
+        self.gate.expect_denied("status", "run")
+        self.gate.close()
+        self.gate = GateHarness()
+        self.gate.init(platforms=["android"])
+        self.gate.add(evidence_type="command", platforms=["android"])
+        self.gate.freeze()
+        invalid_command = self.gate.command_evidence("wrong-command.json")
+        payload = json.loads((self.gate.artifacts() / "wrong-command.json").read_text(encoding="utf-8"))
+        payload["exitCode"] = 1
+        (self.gate.artifacts() / "wrong-command.json").write_text(json.dumps(payload), encoding="utf-8")
+        self.gate.expect_denied("pass", "run", "--criterion", "main", "--platform", "android",
+                                "--evidence", invalid_command, "--source-revision", self.gate.head())
+
+    def test_recorded_evidence_detects_delete_growth_hash_and_content_changes(self):
+        mutations = ("delete", "growth", "content")
+        for mutation in mutations:
+            if mutation != "delete":
+                self.gate.close()
+                self.gate = GateHarness()
+            self.gate.add_freeze_pass()
+            proof = self.gate.artifacts() / "proof-android.json"
+            if mutation == "delete":
+                proof.unlink()
+            elif mutation == "growth":
+                proof.write_bytes(proof.read_bytes() + b" ")
+            else:
+                payload = json.loads(proof.read_text(encoding="utf-8"))
+                payload["command"] = "different command"
+                proof.write_text(json.dumps(payload), encoding="utf-8")
+            self.gate.expect_denied("status", "run")
+            self.gate.expect_denied("finish", "run", "--outcome", "blocked",
+                                    "--source-revision", self.gate.head(), "--reason", "evidence changed")
+
+    def test_missing_ios_cannot_be_promoted_to_success(self):
+        self.gate.init()
+        self.gate.add(evidence_type="command")
+        self.gate.freeze()
+        self.gate.record("pass", self.gate.command_evidence("android.json"))
+        build = self.gate.receipt("build.json", "build", platforms=["android", "ios"])
+        test = self.gate.receipt("test.json", "test", platforms=["android", "ios"])
+        memory = self.gate.receipt("memory.json", "memory")
+        review = self.gate.receipt("review.json", "review")
+        cleanup = self.gate.receipt("cleanup.json", "cleanup")
+        self.gate.expect_denied("finish", "run", "--outcome", "success", "--source-revision",
+                                self.gate.head(), "--build-receipt", build, "--test-receipt", test,
+                                "--memory-receipt", memory, "--review-receipt", review,
+                                "--cleanup-receipt", cleanup)
+
+    def test_success_requires_receipts_and_emits_complete_eligible_report(self):
+        self.gate.add_freeze_pass()
+        self.gate.expect_denied("finish", "run", "--outcome", "success", "--source-revision", self.gate.head())
+        finished = self.gate.successful_finish()
+        self.assertEqual("eligible", finished["draftPr"])
+        report = (self.gate.artifacts() / "report.md").read_text(encoding="utf-8")
+        for expected in ("Outcome: `success`", "Draft PR: eligible", "Checklist and evidence",
+                         "Builds and tests", "Memory, review, cleanup, and devices"):
+            self.assertIn(expected, report)
+
+    def test_receipt_schema_revision_coverage_review_and_cleanup_block_success(self):
+        failures = ("prose", "stale", "coverage", "review", "cleanup")
+        for failure in failures:
+            if failure != "prose":
+                self.gate.close()
+                self.gate = GateHarness()
+            self.gate.add_freeze_pass()
+            revision = self.gate.head()
+            build = self.gate.receipt("build.json", "build", revision, platforms=["android"])
+            test = self.gate.receipt("test.json", "test", revision, platforms=["android"])
+            memory = self.gate.receipt("memory.json", "memory", revision)
+            review = self.gate.receipt("review.json", "review", revision)
+            cleanup = self.gate.receipt("cleanup.json", "cleanup", revision)
+            if failure == "prose":
+                (self.gate.artifacts() / "build.json").write_text("pass", encoding="utf-8")
+            elif failure == "stale":
+                stale = "0" * 40
+                review = self.gate.receipt("review.json", "review", stale)
+            elif failure == "coverage":
+                self.gate.init("unused")
+                # The feature run itself requests Android only, so alter its sealed manifest is invalid.
+                # Coverage is exercised by a fresh default-platform lifecycle below.
+                self.gate.close()
+                self.gate = GateHarness()
+                self.gate.init()
+                self.gate.add(evidence_type="command")
+                self.gate.freeze()
+                for platform in ("android", "ios"):
+                    self.gate.record("pass", self.gate.command_evidence("%s.json" % platform,
+                                                                         platform=platform), platform=platform)
+                revision = self.gate.head()
+                build = self.gate.receipt("build.json", "build", revision, platforms=["android"])
+                test = self.gate.receipt("test.json", "test", revision, platforms=["android"])
+                memory = self.gate.receipt("memory.json", "memory", revision)
+                review = self.gate.receipt("review.json", "review", revision)
+                cleanup = self.gate.receipt("cleanup.json", "cleanup", revision)
+            elif failure == "review":
+                review = self.gate.receipt("review.json", "review", revision,
+                                           unresolvedJustifiedFindings=1)
+            else:
+                cleanup = self.gate.receipt("cleanup.json", "cleanup", revision,
+                                            residualScratch=["run-owned"])
+            self.gate.expect_denied("finish", "run", "--outcome", "success", "--source-revision", revision,
+                                    "--build-receipt", build, "--test-receipt", test,
+                                    "--memory-receipt", memory, "--review-receipt", review,
+                                    "--cleanup-receipt", cleanup)
+
+    def test_scratch_outstanding_lease_hooks_and_known_secret_markers_block_success(self):
+        cases = ("scratch", "lease", "hook", "secret")
+        for case in cases:
+            if case != "scratch":
+                self.gate.close()
+                self.gate = GateHarness()
+            if case in ("hook", "secret"):
+                self.gate.init(platforms=["android"])
+                self.gate.add(evidence_type="command", platforms=["android"])
+                self.gate.freeze()
+                marker = "AUTODEV_DEBUG fixture" if case == "hook" else "ghp_" + ("A" * 30)
+                proof = self.gate.command_evidence("proof-android.json", command=marker)
+                self.gate.record("pass", proof)
+            else:
+                self.gate.add_freeze_pass()
+            if case == "scratch":
+                scratch = self.gate.state() / "scratch"
+                scratch.mkdir()
+                (scratch / "owned.tmp").write_text("left over", encoding="utf-8")
+            elif case == "lease":
+                manifest_path = self.gate.state() / "manifest.json"
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                manifest["deviceLeases"] = ["unreleased"]
+                manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            # Hook and token-shaped input are recorded before finish so the deterministic
+            # success-only scan, rather than hash revalidation, is the rejecting boundary.
+            self.gate.expect_denied("finish", "run", "--outcome", "success", "--source-revision", self.gate.head(),
+                                    "--build-receipt", self.gate.receipt("build.json", "build"),
+                                    "--test-receipt", self.gate.receipt("test.json", "test"),
+                                    "--memory-receipt", self.gate.receipt("memory.json", "memory"),
+                                    "--review-receipt", self.gate.receipt("review.json", "review"),
+                                    "--cleanup-receipt", self.gate.receipt("cleanup.json", "cleanup"))
+
+    def test_retry_requires_fresh_reread_new_hypothesis_and_third_failure_is_partial(self):
+        self.gate.init()
+        self.gate.add(evidence_type="command", platforms=["android"])
+        self.gate.freeze()
+        for number in (1, 2):
+            evidence = self.gate.command_evidence("fail-%s.json" % number, result="fail")
+            self.gate.record("fail", evidence)
+        third = self.gate.command_evidence("fail-3.json", result="fail")
+        self.gate.expect_denied("fail", "run", "--criterion", "main", "--platform", "android",
+                                "--evidence", third, "--source-revision", self.gate.head())
+        time.sleep(0.02)
+        reread = self.gate.write_json("reread.json", {
+            "schemaVersion": 1, "kind": "reread-reference", "sourceRevision": self.gate.head(),
+            "timestamp": TIMESTAMP, "platform": "android", "criterionId": "main",
+            "hypothesis": "fresh cause", "reference": "new logs",
+        })
+        third_result = self.gate.record("fail", third, hypothesis="fresh cause", reread=reread)
+        self.assertTrue(third_result["attempt"]["terminalPartial"])
+        self.gate.expect_denied("pass", "run", "--criterion", "main", "--platform", "android",
+                                "--evidence", self.gate.command_evidence("late-pass.json"),
+                                "--source-revision", self.gate.head())
+        self.gate.expect_denied("finish", "run", "--outcome", "failed", "--source-revision", self.gate.head(),
+                                "--reason", "third failure")
+        partial = self.gate.call("finish", "run", "--outcome", "partial", "--source-revision", self.gate.head(),
+                                 "--reason", "third failure")
+        self.assertEqual("partial", partial["outcome"])
+
+    def test_bug_baseline_and_fixed_evidence_must_match_initial_revision_and_scenario(self):
+        initial = self.gate.head()
+        self.gate.init(task_type="bug")
+        self.gate.add(criterion="repro", kind="repro", evidence_type="command", platforms=["android"])
+        self.gate.freeze()
+        baseline = self.gate.command_evidence("baseline.json", criterion="repro", result="fail", revision=initial)
+        self.gate.record("fail", baseline, criterion="repro", revision=initial, phase="baseline", scenario="save")
+        checked = self.gate.commit_source("fix")
+        fixed = self.gate.command_evidence("fixed.json", criterion="repro", revision=checked)
+        self.gate.expect_denied("pass", "run", "--criterion", "repro", "--platform", "android",
+                                "--evidence", fixed, "--source-revision", checked, "--phase", "fixed",
+                                "--scenario-key", "different")
+        self.gate.record("pass", fixed, criterion="repro", revision=checked, phase="fixed", scenario="save")
+        self.assertEqual("pass", self.gate.call("status", "run")["matrix"][0]["result"])
+
+    def test_perf_requires_immutable_baseline_and_matching_candidate_fingerprint(self):
+        initial = self.gate.head()
+        self.gate.init(task_type="perf")
+        self.gate.add(criterion="perf", evidence_type="metric", platforms=["android"])
+        self.gate.freeze()
+        malformed = self.gate.metric_evidence("malformed.json", revision=initial)
+        malformed_payload = json.loads((self.gate.artifacts() / "malformed.json").read_text(encoding="utf-8"))
+        malformed_payload["value"] = "not-a-number"
+        (self.gate.artifacts() / "malformed.json").write_text(json.dumps(malformed_payload), encoding="utf-8")
+        self.gate.expect_denied("pass", "run", "--criterion", "perf", "--platform", "android",
+                                "--evidence", malformed, "--source-revision", initial, "--phase", "baseline",
+                                "--scenario-fingerprint", "fixture-v1")
+        baseline = self.gate.metric_evidence("baseline.json", revision=initial)
+        self.gate.record("pass", baseline, criterion="perf", revision=initial,
+                         phase="baseline", fingerprint="fixture-v1")
+        checked = self.gate.commit_source("candidate")
+        invalid = self.gate.metric_evidence("invalid.json", revision=checked, phase="candidate",
+                                            fingerprint="different")
+        self.gate.expect_denied("pass", "run", "--criterion", "perf", "--platform", "android",
+                                "--evidence", invalid, "--source-revision", checked, "--phase", "candidate",
+                                "--scenario-fingerprint", "different")
+        candidate = self.gate.metric_evidence("candidate.json", revision=checked, phase="candidate")
+        self.gate.record("pass", candidate, criterion="perf", revision=checked,
+                         phase="candidate", fingerprint="fixture-v1")
+        self.assertEqual("pass", self.gate.call("status", "run")["matrix"][0]["result"])
+
+    def test_non_success_reports_preserve_artifacts_and_reasons(self):
+        for outcome in ("blocked", "failed"):
+            if outcome != "blocked":
+                self.gate.close()
+                self.gate = GateHarness()
+            self.gate.init()
+            proof = self.gate.command_evidence("retained.json")
+            result = self.gate.call("finish", "run", "--outcome", outcome, "--source-revision", self.gate.head(),
+                                    "--reason", "%s fixture" % outcome)
+            self.assertEqual(outcome, result["outcome"])
+            self.assertTrue((self.gate.artifacts() / "retained.json").is_file())
+            report = (self.gate.artifacts() / "report.md").read_text(encoding="utf-8")
+            self.assertIn("Outcome: `%s`" % outcome, report)
+            self.assertIn("Draft PR: not eligible", report)
+            self.assertIn("%s fixture" % outcome, report)
+
+    def test_terminal_report_receipt_and_state_mutation_are_revalidated(self):
+        self.gate.add_freeze_pass()
+        self.gate.successful_finish()
+        (self.gate.artifacts() / "report.md").write_text("tampered", encoding="utf-8")
+        self.gate.expect_denied("status", "run")
+        self.gate.close()
+        self.gate = GateHarness()
+        self.gate.add_freeze_pass()
+        self.gate.successful_finish()
+        (self.gate.artifacts() / "receipts.json").write_text("{}", encoding="utf-8")
+        self.gate.expect_denied("status", "run")
+        self.gate.close()
+        self.gate = GateHarness()
+        self.gate.add_freeze_pass()
+        self.gate.successful_finish()
+        (self.gate.state() / "terminal.json").write_text("{}", encoding="utf-8")
+        self.gate.expect_denied("status", "run")
+        self.gate.close()
+        self.gate = GateHarness()
+        self.gate.init()
+        (self.gate.state() / "owner.json").write_text("{", encoding="utf-8")
+        self.gate.expect_denied("status", "run")
+
+    def test_oversized_structured_artifacts_are_bounded_without_traceback(self):
+        self.gate.init()
+        self.gate.add(evidence_type="command", platforms=["android"])
+        self.gate.freeze()
+        oversized = self.gate.artifacts() / "oversized.json"
+        with oversized.open("wb") as stream:
+            stream.truncate(MAX_SCAN_BYTES + 1)
+        payload = self.gate.expect_denied("pass", "run", "--criterion", "main", "--platform", "android",
+                                          "--evidence", self.gate.relative_artifact("oversized.json"),
+                                          "--source-revision", self.gate.head())
+        self.assertIn("64 MiB", payload["error"])
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

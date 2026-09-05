@@ -9,7 +9,7 @@ Kotlin targets are Android, iOS arm64 device, and iOS arm64 simulator. `iosX64` 
 
 `./gradlew --version` reports Gradle's embedded Kotlin (currently 2.2.21), not the project's Kotlin plugin version. Read `gradle/libs.versions.toml` for project versions.
 
-Cross-platform UI automation uses the external Maestro CLI pinned to 2.6.1; it requires JDK 17 or newer and is not a Gradle dependency. The recorded local execution environment is macOS 26.6.2 arm64 with Xcode 26.6/iOS 26.5, an Android API 36 emulator, and JBR 21 for Maestro. These local facts do not replace the CI pins above. Maestro does not require Python; the available local Python, when a helper needs it, is 3.9.6.
+Cross-platform UI automation uses the external Maestro CLI pinned to 2.6.1; it requires JDK 17 or newer and is not a Gradle dependency. The AutoDev frozen-checklist gate requires Python 3.9 or newer and uses only the standard library; Maestro itself does not require Python. The recorded local environment is macOS 26.6.2 arm64 with Xcode 26.6/iOS 26.5, an Android API 36 emulator, JBR 21 for Maestro, and Python 3.9.6. These local facts do not replace the CI pins above.
 
 ## Commands
 
@@ -24,7 +24,9 @@ Cross-platform UI automation uses the external Maestro CLI pinned to 2.6.1; it r
 xcodebuild -project iosApp/iosApp.xcodeproj -scheme iosApp -sdk iphonesimulator -configuration Debug CODE_SIGNING_ALLOWED=NO build
 ./ui-tests/maestro/run.sh android <device-id> [run-id]
 ./ui-tests/maestro/run.sh ios <device-id> [run-id]
+./gradlew checkMaestroShell
 ./ui-tests/maestro/tests/xcode-preflight-test.sh
+python3 .agents/skills/habit-lab-autodev/scripts/autodev_gate.py --help
 ```
 
 `:shared:check` includes architecture and documentation checks, plus the Maestro shell contract check on non-Windows hosts when Bash is available. Native Windows and hosts without Bash skip that shell-only task and do not establish its coverage. Android device tests require one API 33+ device; CI uses an API 36 Google APIs x86_64 emulator. Run `:shared:iosSimulatorArm64Test` on Apple Silicon and `:shared:iosX64Test` on Intel macOS, where that target is configured. See [testing and verification](07-testing-verification.md) before choosing a subset.

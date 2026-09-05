@@ -20,16 +20,18 @@ The AutoDev report stores only its orchestration metadata and evidence map under
 
 ## Gate
 
-Select commands and checks from the root [testing policy](../../../docs/07-testing-verification.md) and [toolchain catalog](../../../docs/01-stack-toolchain.md). The gate passes only when:
+Select commands and checks from the root [testing policy](../../../docs/07-testing-verification.md) and [toolchain catalog](../../../docs/01-stack-toolchain.md). Run `status` to revalidate the checklist chains plus every evidence hash and structured content schema, then use the [executable gate](checklist-gate.md) for the terminal report. The gate passes only when:
 
 - every frozen assertion is evidenced and passes;
 - required owner builds, tests, static checks, and documentation checks pass;
 - the declared regression boundary passes;
 - independent review has no unresolved justified finding;
 - evidence is readable, attributable, secret-free, and preserved;
-- scratch cleanup completed without affecting user or concurrent-run state.
+- structured build/test, memory-use/lint, independent-review, and cleanup receipts are bound to the checked revision;
+- scratch cleanup completed without affecting user or concurrent-run state, and no device lease remains;
+- the bounded deterministic hook/known-secret-marker scan is clean within its documented coverage.
 
-The gate is a review contract, not an executable implementation in this scaffold. Missing automation must remain visible as a blocker or limitation; do not create an ad hoc gate and do not edit the skill, checklist, test expectations, or scoring rules to obtain a pass.
+Missing device automation remains visible as a blocker or limitation; do not create an ad hoc adapter or edit the skill, checklist, test expectations, or scoring rules to obtain a pass.
 
 ## Reporting
 
