@@ -74,10 +74,10 @@ habitlab_canonicalize_file() {
 }
 
 habitlab_file_identity() {
-    if stat -f '%d:%i' "$1" >/dev/null 2>&1; then
-        stat -f '%d:%i' "$1"
+    if /usr/bin/stat -c '%d:%i' "$1" >/dev/null 2>&1; then
+        /usr/bin/stat -c '%d:%i' "$1"
     else
-        stat -c '%d:%i' "$1" 2>/dev/null
+        /usr/bin/stat -f '%d:%i' "$1" 2>/dev/null
     fi
 }
 

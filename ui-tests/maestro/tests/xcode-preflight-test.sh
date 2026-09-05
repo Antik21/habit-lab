@@ -46,6 +46,7 @@ create_case() {
     cp "$TEST_DIR/stubs/xcrun" "$STUB_DIR/xcrun"
     cp "$TEST_DIR/stubs/java" "$STUB_DIR/java"
     cp "$TEST_DIR/stubs/maestro" "$STUB_DIR/maestro"
+    cp "$TEST_DIR/stubs/stat" "$STUB_DIR/stat"
     cp "$TEST_DIR/stubs/xcodebuild" "$XCODEBUILD_BIN"
     chmod +x "$STUB_DIR"/* "$XCODEBUILD_BIN"
     CANONICAL_DEVELOPER_ROOT="$(cd -P -- "$DEVELOPER_ROOT" && pwd -P)"
@@ -119,6 +120,21 @@ fi
     fail_test "strict repeated source was not reported"
 
 create_case supported
+identity_first="$CASE_DIR/identity-first"
+identity_second="$CASE_DIR/identity-second"
+shadowed_stat_log="$CASE_DIR/shadowed-stat.log"
+printf 'first\n' >"$identity_first"
+printf 'second\n' >"$identity_second"
+(
+    export PATH="$STUB_DIR:$PATH"
+    export STUB_STAT_LOG="$shadowed_stat_log"
+    source "$PREFLIGHT"
+    first_identity="$(habitlab_file_identity "$identity_first")"
+    second_identity="$(habitlab_file_identity "$identity_second")"
+    [[ -n "$first_identity" && -n "$second_identity" && "$first_identity" != "$second_identity" ]]
+) || fail_test "trusted stat did not distinguish file identities"
+[[ ! -e "$shadowed_stat_log" ]] || fail_test "file identity used PATH-shadowed stat"
+
 production_resolution="$({
     unset HABITLAB_XCODE_PREFLIGHT_TEST_MODE
     unset HABITLAB_XCODE_PREFLIGHT_TEST_XCRUN
@@ -168,6 +184,22 @@ pinned_output="$(
 )" || fail_test "supported pinned execution failed"
 [[ "$pinned_output" == "$CANONICAL_DEVELOPER_ROOT" ]] ||
     fail_test "pinned execution did not use the canonical developer directory"
+
+create_case empty-version-count
+empty_version_count="$CASE_DIR/version-count"
+: >"$empty_version_count"
+empty_count_output="$(env \
+    DEVELOPER_DIR= \
+    PATH="$STUB_DIR:$PATH" \
+    STUB_DEVELOPER_DIR="$DEVELOPER_ROOT" \
+    STUB_XCODEBUILD="$XCODEBUILD_BIN" \
+    STUB_XCODE_VERSION=26.4 \
+    STUB_XCODE_VERSION_AFTER=26.5 \
+    STUB_XCODE_VERSION_COUNT_FILE="$empty_version_count" \
+    "$PREFLIGHT")" || fail_test "empty version count file was not treated as zero"
+[[ "$empty_count_output" == "Xcode preflight passed: selected Xcode 26.4" ]] ||
+    fail_test "empty version count changed the initial selected version"
+[[ "$(<"$empty_version_count")" == 1 ]] || fail_test "empty version count was not incremented from zero"
 
 create_case too-old
 if too_old_output="$(run_standalone 25.9 2>&1)"; then
@@ -326,8 +358,9 @@ create_case runner-happy-path
 readonly HAPPY_DEVICE_ID=11111111-1111-1111-1111-111111111111
 happy_log="$CASE_DIR/operations.log"
 (
+    cd "$CASE_DIR"
     unset DEVELOPER_DIR
-    export PATH="$STUB_DIR:$PATH"
+    export PATH="stubs:$PATH"
     export STUB_DEVELOPER_DIR="$DEVELOPER_ROOT"
     export STUB_XCODEBUILD="$XCODEBUILD_BIN"
     export STUB_XCODE_VERSION=26.4

@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+
+printf 'PATH-shadowed stat executed\n' >"${STUB_STAT_LOG:?}"
+exit 99

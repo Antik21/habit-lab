@@ -62,8 +62,13 @@ fi
 [[ "$java_major" =~ ^[0-9]+$ ]] || fail "could not determine the Java major version"
 (( java_major >= 17 )) || fail "Java 17 or newer is required by Maestro"
 
-readonly MAESTRO_BIN="$(command -v maestro || true)"
-[[ -n "$MAESTRO_BIN" ]] || fail "Maestro $EXPECTED_MAESTRO_VERSION is not installed or not on PATH"
+maestro_candidate="$(command -v maestro || true)"
+[[ -n "$maestro_candidate" && -x "$maestro_candidate" ]] ||
+    fail "Maestro $EXPECTED_MAESTRO_VERSION is not installed or not on PATH"
+maestro_parent="$(cd -P -- "$(dirname -- "$maestro_candidate")" 2>/dev/null && pwd -P)" ||
+    fail "could not canonicalize the Maestro executable path"
+readonly MAESTRO_BIN="$maestro_parent/$(basename -- "$maestro_candidate")"
+[[ -x "$MAESTRO_BIN" ]] || fail "the canonical Maestro executable is unavailable"
 maestro_version="$($MAESTRO_BIN --version 2>/dev/null | tr -d '\r\n')"
 [[ "$maestro_version" == "$EXPECTED_MAESTRO_VERSION" ]] ||
     fail "Maestro $EXPECTED_MAESTRO_VERSION is required; found '${maestro_version:-unknown}'"
@@ -138,7 +143,7 @@ set +e
             build
         readonly app_path="$derived_data/Build/Products/Debug-iphonesimulator/iosApp.app"
         [[ -d "$app_path" ]] || fail "iOS simulator app was not produced at $app_path"
-        habitlab_xcode_try_xcrun simctl terminate "$DEVICE_ID" "$APP_ID" >/dev/null 2>&1
+        habitlab_xcode_try_xcrun simctl terminate "$DEVICE_ID" "$APP_ID" >/dev/null
         pinned_xcrun simctl install "$DEVICE_ID" "$app_path"
     fi
 
