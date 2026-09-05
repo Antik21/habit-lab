@@ -1,0 +1,7 @@
+appId: com.denis.habitlab
+---
+- assertVisible:
+    id: habitlab.settings.screen.root
+- back
+- assertVisible:
+    id: habitlab.experiment-list.screen.root

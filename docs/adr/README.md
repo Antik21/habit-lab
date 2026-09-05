@@ -26,3 +26,4 @@ Copy [the template](template.md), add it to the index below, and link the affect
 
 - [ADR 0001: Temporary iOS leading-edge back adapter](0001-navigation3-ios-edge-adapter.md) — Accepted
 - [ADR 0002: Common route-only navigation restoration](0002-navigation3-ios-restoration-runtime.md) — Accepted
+- [ADR 0003: Maestro cross-platform UI automation](0003-maestro-cross-platform-ui-automation.md) — Accepted
