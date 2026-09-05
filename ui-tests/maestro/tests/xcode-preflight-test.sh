@@ -201,6 +201,23 @@ empty_count_output="$(env \
     fail_test "empty version count changed the initial selected version"
 [[ "$(<"$empty_version_count")" == 1 ]] || fail_test "empty version count was not incremented from zero"
 
+create_case no-newline-version-count
+no_newline_version_count="$CASE_DIR/version-count"
+printf '1' >"$no_newline_version_count"
+no_newline_count_output="$(env \
+    DEVELOPER_DIR= \
+    PATH="$STUB_DIR:$PATH" \
+    STUB_DEVELOPER_DIR="$DEVELOPER_ROOT" \
+    STUB_XCODEBUILD="$XCODEBUILD_BIN" \
+    STUB_XCODE_VERSION=26.4 \
+    STUB_XCODE_VERSION_AFTER=26.5 \
+    STUB_XCODE_VERSION_COUNT_FILE="$no_newline_version_count" \
+    "$PREFLIGHT")" || fail_test "no-newline numeric version count was rejected"
+[[ "$no_newline_count_output" == "Xcode preflight passed: selected Xcode 26.5" ]] ||
+    fail_test "no-newline numeric version count was not preserved"
+[[ "$(<"$no_newline_version_count")" == 2 ]] ||
+    fail_test "no-newline numeric version count was not incremented"
+
 create_case too-old
 if too_old_output="$(run_standalone 25.9 2>&1)"; then
     fail_test "too-old Xcode was accepted"
