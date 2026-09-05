@@ -480,8 +480,7 @@ class DocumentationChecker {
         }
         val allocated = mutableSetOf<String>()
         return headings.map { heading ->
-            val base = heading.lowercase()
-                .replace(HTML_TAG, "")
+            val base = stripHtmlOutsideCodeSpans(heading).lowercase()
                 .replace(HEADING_PUNCTUATION, "")
                 .trim()
                 .replace(WHITESPACE, "-")
@@ -493,6 +492,81 @@ class DocumentationChecker {
             }
             candidate
         }.toSet()
+    }
+
+    /** Removes rendered HTML markup while preserving literal tag-shaped text inside code spans. */
+    private fun stripHtmlOutsideCodeSpans(value: String): String {
+        val result = StringBuilder(value.length)
+        var index = 0
+        while (index < value.length) {
+            if (value[index] == '`') {
+                val delimiterLength = backtickRunLength(value, index)
+                val closing = findClosingBacktickRun(value, index + delimiterLength, delimiterLength)
+                if (closing == null) {
+                    result.append(value, index, index + delimiterLength)
+                    index += delimiterLength
+                } else {
+                    result.append(value, index + delimiterLength, closing)
+                    index = closing + delimiterLength
+                }
+                continue
+            }
+            if (value[index] == '<') {
+                val htmlEnd = findHtmlTagEnd(value, index)
+                if (htmlEnd != null) {
+                    index = htmlEnd + 1
+                    continue
+                }
+            }
+            result.append(value[index])
+            index += 1
+        }
+        return result.toString()
+    }
+
+    private fun backtickRunLength(value: String, start: Int): Int {
+        var end = start
+        while (end < value.length && value[end] == '`') end += 1
+        return end - start
+    }
+
+    private fun findClosingBacktickRun(value: String, start: Int, delimiterLength: Int): Int? {
+        var index = start
+        while (index < value.length) {
+            if (value[index] != '`') {
+                index += 1
+                continue
+            }
+            val runLength = backtickRunLength(value, index)
+            if (runLength == delimiterLength) return index
+            index += runLength
+        }
+        return null
+    }
+
+    private fun findHtmlTagEnd(value: String, start: Int): Int? {
+        if (value.startsWith("<!--", start)) {
+            val commentEnd = value.indexOf("-->", startIndex = start + 4)
+            return commentEnd.takeIf { it >= 0 }?.plus(2)
+        }
+        var index = start + 1
+        if (index < value.length && value[index] == '/') index += 1
+        if (index >= value.length || !value[index].isLetter()) return null
+        index += 1
+        while (index < value.length && (value[index].isLetterOrDigit() || value[index] == '-')) index += 1
+        if (index >= value.length || value[index] !in " \t/>") return null
+
+        var quote: Char? = null
+        while (index < value.length) {
+            val current = value[index]
+            when {
+                quote != null && current == quote -> quote = null
+                quote == null && (current == '"' || current == '\'') -> quote = current
+                quote == null && current == '>' -> return index
+            }
+            index += 1
+        }
+        return null
     }
 
     private fun normalizeReferenceLabel(value: String): String =
@@ -568,7 +642,6 @@ class DocumentationChecker {
         private val ATX_HEADING = Regex("^ {0,3}#{1,6}(?:[ \\t]+|$)(.*?)(?:[ \\t]+#+[ \\t]*)?$")
         private val SETEXT_UNDERLINE = Regex("^ {0,3}(?:=+|-+)[ \\t]*$")
         private val SETEXT_CONTENT = Regex("^ {0,3}\\S.*$")
-        private val HTML_TAG = Regex("<[^>]+>")
         private val HEADING_PUNCTUATION = Regex("[^\\p{L}\\p{N} _-]")
         private val WHITESPACE = Regex("\\s+")
         private val MARKDOWN_ESCAPE = Regex("\\\\([!\"#$%&'()*+,./:;<=>?@\\[\\]\\\\^_`{|}~-])")

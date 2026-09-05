@@ -17,10 +17,11 @@ Kotlin targets are Android, iOS arm64 device, and iOS arm64 simulator. `iosX64` 
 ./gradlew :shared:check
 ./gradlew :androidApp:assembleDebug
 ./gradlew :shared:iosSimulatorArm64Test
+./gradlew :shared:iosX64Test
 ./gradlew :shared:connectedAndroidDeviceTest
-xcodebuild -project iosApp/iosApp.xcodeproj -scheme iosApp -sdk iphonesimulator -configuration Debug build
+xcodebuild -project iosApp/iosApp.xcodeproj -scheme iosApp -sdk iphonesimulator -configuration Debug CODE_SIGNING_ALLOWED=NO build
 ```
 
-`:shared:check` includes architecture and documentation checks. Android device tests require one API 33+ device; CI uses an API 36 Google APIs x86_64 emulator. The iOS command runs on an Apple Silicon simulator target; Intel hosts use the configured x64 target. See [testing and verification](07-testing-verification.md) before choosing a subset.
+`:shared:check` includes architecture and documentation checks. Android device tests require one API 33+ device; CI uses an API 36 Google APIs x86_64 emulator. Run `:shared:iosSimulatorArm64Test` on Apple Silicon and `:shared:iosX64Test` on Intel macOS, where that target is configured. See [testing and verification](07-testing-verification.md) before choosing a subset.
 
 Dependencies are centralized in `gradle/libs.versions.toml`; policy for adding them is owned by [libraries and licenses](08-libraries-licenses.md).

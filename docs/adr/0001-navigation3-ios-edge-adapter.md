@@ -39,3 +39,8 @@ device-tested because it was not installed.
 Remove the adapter and its `requestBack()` bridge after upgrading Compose/Navigation 3 when the native
 Compose edge recognizer passes the same simulator gesture flows in the SwiftUI embedding. The common
 navigation stack and test selectors should remain unchanged during that migration.
+
+## Related current policy
+
+- [Presentation and navigation](../../.agents/docs/03-presentation-navigation.md)
+- [iOS host and adapters](../../.agents/docs/06-platform-ios.md)

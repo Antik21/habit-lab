@@ -5,9 +5,9 @@ import kotlin.io.path.createDirectories
 import kotlin.io.path.writeText
 import kotlin.test.Test
 import kotlin.test.assertContains
+import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
-import kotlin.test.assertTrue
 import org.gradle.api.tasks.InputFile
 import org.gradle.api.tasks.InputFiles
 import org.gradle.api.tasks.Internal
@@ -20,16 +20,25 @@ class CheckDocumentationTaskTest {
     fun `declares cache-relevant inputs and keeps repository root internal`() {
         val taskClass = CheckDocumentationTask::class.java
 
-        assertNotNull(taskClass.getMethod("getDocumentationFiles").getAnnotation(InputFiles::class.java))
-        assertNotNull(taskClass.getMethod("getFactOwnersFile").getAnnotation(InputFile::class.java))
-        assertNotNull(taskClass.getMethod("getBudgetsFile").getAnnotation(InputFile::class.java))
-        assertNotNull(taskClass.getMethod("getRepositoryRoot").getAnnotation(Internal::class.java))
-        assertTrue(
-            listOf("getDocumentationFiles", "getFactOwnersFile", "getBudgetsFile").all { getter ->
-                taskClass.getMethod(getter).getAnnotation(PathSensitive::class.java)?.value ==
-                    PathSensitivity.RELATIVE
-            },
+        assertNotNull(
+            taskClass.getMethod("getDocumentationFiles").getAnnotation(InputFiles::class.java),
+            "getDocumentationFiles must declare @InputFiles",
         )
+        assertNotNull(
+            taskClass.getMethod("getFactOwnersFile").getAnnotation(InputFile::class.java),
+            "getFactOwnersFile must declare @InputFile",
+        )
+        assertNotNull(
+            taskClass.getMethod("getBudgetsFile").getAnnotation(InputFile::class.java),
+            "getBudgetsFile must declare @InputFile",
+        )
+        assertNotNull(
+            taskClass.getMethod("getRepositoryRoot").getAnnotation(Internal::class.java),
+            "getRepositoryRoot must declare @Internal",
+        )
+        assertRelativePathSensitive(taskClass, "getDocumentationFiles")
+        assertRelativePathSensitive(taskClass, "getFactOwnersFile")
+        assertRelativePathSensitive(taskClass, "getBudgetsFile")
     }
 
     @Test
@@ -109,6 +118,21 @@ class CheckDocumentationTaskTest {
     }
 
     private companion object {
+        fun assertRelativePathSensitive(
+            taskClass: Class<CheckDocumentationTask>,
+            getterName: String,
+        ) {
+            val annotation = assertNotNull(
+                taskClass.getMethod(getterName).getAnnotation(PathSensitive::class.java),
+                "$getterName must declare @PathSensitive",
+            )
+            assertEquals(
+                PathSensitivity.RELATIVE,
+                annotation.value,
+                "$getterName must use relative path sensitivity",
+            )
+        }
+
         inline fun <T> withTaskFixture(block: (TaskFixture) -> T): T = TaskFixture.create().use(block)
     }
 }

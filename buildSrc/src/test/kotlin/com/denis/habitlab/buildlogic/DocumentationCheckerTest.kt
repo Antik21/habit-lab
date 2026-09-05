@@ -210,6 +210,27 @@ class DocumentationCheckerTest {
     }
 
     @Test
+    fun `preserves angle-bracket text in code spans while stripping actual HTML from anchors`() =
+        withFixture { fixture ->
+            val sources = fixture.baselineSources().apply {
+                this["README.md"] = """
+                    [code only](docs/code-span-headings.md#tag)
+                    [mixed](docs/code-span-headings.md#prefix-tag)
+                    [variable delimiter](docs/code-span-headings.md#double-tag-suffix)
+                    [html](docs/code-span-headings.md#prefix-suffix)
+                """.trimIndent()
+                this["docs/code-span-headings.md"] = """
+                    # `<Tag>`
+                    # Prefix `<Tag>`
+                    # Double ``<Tag>`` Suffix
+                    # Prefix <Tag> Suffix
+                """.trimIndent()
+            }
+
+            assertEquals(emptyList(), fixture.check(sources))
+        }
+
+    @Test
     fun `allocates the next free heading anchor across explicit suffix collisions`() =
         withFixture { fixture ->
             val sources = fixture.baselineSources().apply {

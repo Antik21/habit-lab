@@ -4,7 +4,7 @@ These are ordering recipes. The linked owner documents define policy.
 
 ## Screen
 
-Read [the Compose screen rule](../rules/compose.md) and [presentation policy](03-presentation-navigation.md). Create a feature/screen package with State, ViewModel, Screen, optional UI mapper, and sections. Keep Content stateless, resolve an entry-scoped ViewModel at the host boundary, route typed effects outward, use resources/automation IDs, and verify both targets.
+Read [the Compose screen rule](../rules/compose.md) and [presentation policy](03-presentation-navigation.md). Create the required State, ViewModel, and Screen files; add a UI mapper when domain-to-UI mapping warrants it and sections when layout complexity meets the Compose rule. Keep Content stateless, resolve an entry-scoped ViewModel at the host boundary, route typed effects outward, use resources/automation IDs, and verify both targets.
 
 ## Route, deep link, back, or restoration
 
@@ -12,7 +12,7 @@ Follow [navigation policy](03-presentation-navigation.md). Update `AppDestinatio
 
 ## Dialog and result
 
-Follow [dialog policy](03-presentation-navigation.md). Model a dialog route and typed caller/result. Validate the immediate caller, pop and persist before delivery, then send a caller-scoped one-shot result. Never snapshot or store a result in the route or `ViewState`; funnel explicit cancel and system/edge dismiss through the same path.
+Follow [dialog policy](03-presentation-navigation.md). Model a dialog route and typed caller/result. Validate the immediate caller, pop the dialog, queue the caller-scoped one-shot result, then await route persistence; recomposition may deliver that queued result while persistence is suspended. Never snapshot or store a result in the route or `ViewState`; funnel explicit cancel and system/edge dismiss through the same path.
 
 ## Repository or Room slice
 

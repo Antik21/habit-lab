@@ -11,7 +11,7 @@ Before adding or upgrading a dependency:
 2. Check Kotlin Multiplatform target support, minimum OS/SDK requirements, transitive graph, maintenance, and compatibility with the pinned Kotlin/Compose/AGP versions.
 3. Record the exact version in the catalog; do not place ad-hoc versions in module scripts.
 4. Review license and notices for both direct and bundled/transitive artifacts. Do not add code with an incompatible or unknown distribution license.
-5. Run target compilation and the verification owner requires. Update this owner when the approved stack changes.
+5. Run target compilation plus the relevant gate selected by [testing and verification](07-testing-verification.md). Update this owner when the approved stack changes.
 
 Do not introduce parallel DI, navigation, database, serialization, async/state, or UI stacks without an accepted ADR. Replacing a library or changing a provider/privacy boundary also requires one where [ADR policy](../../docs/adr/README.md) says so.
 
