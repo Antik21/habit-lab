@@ -15,6 +15,8 @@ Before adding or upgrading a dependency:
 
 Do not introduce parallel DI, navigation, database, serialization, async/state, or UI stacks without an accepted ADR. Replacing a library or changing a provider/privacy boundary also requires one where [ADR policy](../../docs/adr/README.md) says so.
 
+Maestro CLI 2.6.1 is an external development tool, not an application library, so it is pinned in the [toolchain owner](01-stack-toolchain.md) and must not be added to `libs.versions.toml`. Its [source](https://github.com/mobile-dev-inc/Maestro/tree/cli-2.6.1) is published under the [Apache License 2.0](https://github.com/mobile-dev-inc/Maestro/blob/cli-2.6.1/LICENSE), and its JDK requirement is part of the toolchain gate. No Maestro code is bundled into either application.
+
 <!-- fact-owner: planned-capabilities -->
 <!-- canonical-signature: planned-capabilities-v1 -->
 

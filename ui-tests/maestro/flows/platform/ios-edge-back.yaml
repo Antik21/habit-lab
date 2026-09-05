@@ -1,0 +1,19 @@
+appId: com.denis.habitlab
+---
+- assertVisible:
+    id: habitlab.settings.screen.root
+- swipe:
+    start: 1%, 50%
+    end: 90%, 50%
+    duration: 600
+- runFlow:
+    when:
+      visible:
+        id: habitlab.settings.screen.root
+    commands:
+      - swipe:
+          start: 99%, 50%
+          end: 10%, 50%
+          duration: 600
+- assertVisible:
+    id: habitlab.experiment-list.screen.root

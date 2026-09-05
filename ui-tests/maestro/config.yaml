@@ -1,0 +1,6 @@
+flows:
+  - flows/reference-screens.yaml
+executionOrder:
+  continueOnFailure: false
+  flowsOrder:
+    - reference-screens
