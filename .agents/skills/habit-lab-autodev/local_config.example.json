@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "stateDirectory": ".autodev/state",
+  "artifactsDirectory": ".autodev/artifacts",
+  "android": {
+    "emulatorId": null,
+    "emulatorIdEnv": null
+  },
+  "ios": {
+    "simulatorId": null,
+    "simulatorIdEnv": null
+  }
+}
