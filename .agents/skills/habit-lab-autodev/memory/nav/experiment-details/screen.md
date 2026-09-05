@@ -12,6 +12,8 @@ For the `sleep-routine` draft, [`open-editor-from-details.yaml`](../../../flows/
 
 Delete opens `ConfirmDelete(experimentId)` at `habitlab.confirm-delete.screen.root` with `.action.cancel` and `.action.confirm`. [`cancel-delete-from-details.yaml`](../../../flows/cancel-delete-from-details.yaml) delivers cancellation to this Details caller; [`confirm-delete-to-list.yaml`](../../../flows/confirm-delete-to-list.yaml) deletes the flow-created draft and returns List, preserving both fixed rows.
 
+Android and iOS are supported; Details flows have no platform-owned gesture and use app-owned return IDs.
+
 ## Evidence
 
 Verification date: 2026-09-05. Independent reviewer: Codex; final verdict clean. Codex Manager supplied and checked gate results and visually inspected all 12 final screenshots; the independent reviewer also reported them sound. The full owner gate passed: `:buildSrc:test checkDocumentation :shared:check :androidApp:assembleDebug`, 58 connected-Android device tests, iOS simulator common tests, a preflight-wrapped native Xcode build, and `checkMaestroShell` for 15 subflows. Every final directory contains `command.log`, `report.xml`, three screenshots, `debug/maestro.log`, and `debug/commands-(reference-screens).json`; no filename contained `failure`, `error`, or `❌`.

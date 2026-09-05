@@ -17,6 +17,8 @@ appId: com.denis.habitlab
     visible:
       id: habitlab.experiment-details.screen.root
     timeout: 10000
+- assertNotVisible:
+    id: habitlab.confirm-delete.screen.root
 - assertVisible:
     id: habitlab.experiment-details.action.delete
 - assertVisible:

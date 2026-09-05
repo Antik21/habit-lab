@@ -1,14 +1,14 @@
 # Settings
 
-**Destination and purpose.** `AppDestination.Settings` is entered only from Gallery and presents theme selection plus a toolbar back control. The checked source revision is `1dfd34957075cccb6fca1cb1989e5610f56c8f3e`; the exact [reference flow contract](../../../../../../ui-tests/maestro/flows/reference-screens.yaml) was verified at that revision. This docs-only promotion successor does not modify the verified production/flow revision.
+**Destination and purpose.** `AppDestination.Settings` is entered from Experiment List, whose stable wire route remains `AppDestination.Gallery`, and presents theme selection plus a toolbar back control. The checked source revision is `1dfd34957075cccb6fca1cb1989e5610f56c8f3e`; the exact [reference flow contract](../../../../../../ui-tests/maestro/flows/reference-screens.yaml) was verified at that revision. This docs-only promotion successor does not modify the verified production/flow revision.
 
 **Admission.** Terminal success: confirmed. Full owner gate: passed.
 
 ## Fixture, IDs, and paths
 
-Start at the debug-seeded List root and run [`open-settings.yaml`](../../../flows/open-settings.yaml). App-owned sequence is `habitlab.experiment-list.screen.root`, `habitlab.experiment-list.action.open-settings`, `habitlab.settings.screen.root`, `habitlab.settings.action.back`, and the closed theme IDs. The expected Settings completion is its screen root.
+Start at the debug-seeded List root and run [`open-settings.yaml`](../../../flows/open-settings.yaml). App-owned sequence is `habitlab.experiment-list.screen.root`, `habitlab.experiment-list.action.open-settings`, `habitlab.settings.screen.root`, `habitlab.settings.action.back`, `habitlab.settings.theme.system`, `habitlab.settings.theme.light`, and `habitlab.settings.theme.dark`. The expected open-flow completion is the Settings root; its toolbar back is the app-owned `habitlab.settings.action.back` path.
 
-The platform return is intentionally limited to the existing [`android-system-back.yaml`](../../../../../../ui-tests/maestro/flows/platform/android-system-back.yaml) or [`ios-edge-back.yaml`](../../../../../../ui-tests/maestro/flows/platform/ios-edge-back.yaml), each ending at List. The iOS flow's leading-edge swipe is the sole coordinate exception; no app control is selected by coordinate. Settings has no typed child argument or dialog result.
+Separately, the platform return is limited to [`android-system-back.yaml`](../../../../../../ui-tests/maestro/flows/platform/android-system-back.yaml) or [`ios-edge-back.yaml`](../../../../../../ui-tests/maestro/flows/platform/ios-edge-back.yaml), each starting at Settings and completing at List. The iOS flow's leading-edge swipe is the sole coordinate exception; no app control is selected by coordinate. Settings has no typed child argument or dialog result.
 
 ## Evidence
 

@@ -23,4 +23,4 @@ A candidate may preserve attributable platform evidence while the full owner gat
 
 Nodes must not contain localized labels, runtime/user values, coordinates for app controls, credentials, absolute machine paths, timing guesses presented as guarantees, or copied owner policy. The only system-gesture coordinate exception must reference [ADR 0003](../../../../../docs/adr/0003-maestro-cross-platform-ui-automation.md).
 
-A node is evidence-backed guidance, not an executable flow or a claim that the current screen is reachable. Validate all IDs against the production automation contract before use. Create a node only after its separate Android/iOS evidence and full owner gate pass; this schema does not alter the executable flow contract.
+A node is evidence-backed guidance, not an executable flow or a claim that the current screen is reachable. Validate all IDs against the production automation contract before use. Create a node only after separate qualifying evidence for every listed supported platform and the full owner gate pass; this schema does not alter the executable flow contract.

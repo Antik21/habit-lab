@@ -6,9 +6,9 @@
 
 ## Fixture, IDs, and paths
 
-Start on seeded `daily-movement` Details. That caller emits the typed `ExperimentId` and current local date; the host converts the latter to `CheckInRouteDate`. [`open-daily-check-in-from-details.yaml`](../../../flows/open-daily-check-in-from-details.yaml) uses `habitlab.experiment-details.action.check-in`, then checks `habitlab.daily-check-in.screen.root`, `.action.performed`, and `.action.skipped`. Its expected completion is Daily Check-In.
+Start on seeded `daily-movement` Details. That caller emits the typed `ExperimentId` and current local date; the host converts the latter to `CheckInRouteDate`. [`open-daily-check-in-from-details.yaml`](../../../flows/open-daily-check-in-from-details.yaml) uses `habitlab.experiment-details.action.check-in`, then checks `habitlab.daily-check-in.screen.root`, `habitlab.daily-check-in.action.performed`, and `habitlab.daily-check-in.action.skipped`. Its expected completion is Daily Check-In.
 
-[`back-to-details-from-daily-check-in.yaml`](../../../flows/back-to-details-from-daily-check-in.yaml) verifies toolbar back restores Details. [`record-daily-check-in.yaml`](../../../flows/record-daily-check-in.yaml) re-enters, selects the closed skipped-outcome control, verifies `habitlab.daily-check-in.state.outcome.skipped`, saves, and returns Details. There is no dialog result on this path.
+[`back-to-details-from-daily-check-in.yaml`](../../../flows/back-to-details-from-daily-check-in.yaml) taps `habitlab.daily-check-in.action.back` and verifies toolbar back restores Details. [`record-daily-check-in.yaml`](../../../flows/record-daily-check-in.yaml) re-enters, taps `habitlab.daily-check-in.action.skipped`, verifies `habitlab.daily-check-in.state.outcome.skipped`, taps `habitlab.daily-check-in.action.save`, and returns Details. There is no dialog result on this path.
 
 ## Evidence
 

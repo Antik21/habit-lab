@@ -125,7 +125,6 @@ object ExperimentListAutomationIds {
     val loading = AutomationId.ExperimentListLoading
     val empty = AutomationId.ExperimentListEmpty
     val error = AutomationId.ExperimentListError
-    val row = AutomationId.ExperimentListRow
     val dailyMovementRow = AutomationId.ExperimentListDailyMovementRow
     val sleepRoutineRow = AutomationId.ExperimentListSleepRoutineRow
 }
