@@ -1,0 +1,5 @@
+# Experiment List logic
+
+`ViewState` starts in `ContentUiModel.Loading`. [`ExperimentListUiMapper.map`](../../../../../../shared/src/commonMain/kotlin/com/denis/habitlab/shared/presentation/experimentlist/ExperimentListUiMapper.kt) maps a failed observation to error and an available observation to empty or available rows. [`experimentListRowAutomationIdFor`](../../../../../../shared/src/commonMain/kotlin/com/denis/habitlab/shared/presentation/experimentlist/ExperimentListUiMapper.kt) maps only typed `daily-movement` and `sleep-routine` IDs to their distinct closed selectors; every other typed ID maps to `ExperimentListRow`.
+
+[`ExperimentListViewModel`](../../../../../../shared/src/commonMain/kotlin/com/denis/habitlab/shared/presentation/experimentlist/ExperimentListViewModel.kt) observes the list and accepts a row click only when the ID remains in available state. Its effects are `OpenDetails(id)`, `OpenCreateEditor`, and `OpenSettings`; [`AppNavigator.handleListEffect`](../../../../../../shared/src/commonMain/kotlin/com/denis/habitlab/shared/app/Navigation3AppHost.kt) converts them to the corresponding destination.

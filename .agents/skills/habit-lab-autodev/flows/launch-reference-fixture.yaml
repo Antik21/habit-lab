@@ -1,0 +1,19 @@
+appId: com.denis.habitlab
+---
+# Start state: any app state; clearState establishes the fixed debug fixture.
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible:
+      id: habitlab.experiment-list.screen.root
+    timeout: 20000
+- extendedWaitUntil:
+    visible:
+      id: habitlab.experiment-list.row.daily-movement
+    timeout: 20000
+- extendedWaitUntil:
+    visible:
+      id: habitlab.experiment-list.row.sleep-routine
+    timeout: 20000
+- assertVisible:
+    id: habitlab.experiment-list.screen.root

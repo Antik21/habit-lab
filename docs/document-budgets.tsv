@@ -16,6 +16,16 @@ README.md	450
 .agents/skills/habit-lab-autodev/evals/scenarios.md	1000
 .agents/skills/habit-lab-autodev/memory/lessons.md	500
 .agents/skills/habit-lab-autodev/memory/nav/_SCHEMA.md	500
+.agents/skills/habit-lab-autodev/memory/nav/daily-check-in/logic.md	500
+.agents/skills/habit-lab-autodev/memory/nav/daily-check-in/screen.md	500
+.agents/skills/habit-lab-autodev/memory/nav/experiment-details/logic.md	500
+.agents/skills/habit-lab-autodev/memory/nav/experiment-details/screen.md	500
+.agents/skills/habit-lab-autodev/memory/nav/experiment-editor/logic.md	500
+.agents/skills/habit-lab-autodev/memory/nav/experiment-editor/screen.md	500
+.agents/skills/habit-lab-autodev/memory/nav/experiment-list/logic.md	500
+.agents/skills/habit-lab-autodev/memory/nav/experiment-list/screen.md	500
+.agents/skills/habit-lab-autodev/memory/nav/settings/logic.md	500
+.agents/skills/habit-lab-autodev/memory/nav/settings/screen.md	500
 .agents/skills/habit-lab-autodev/memory/screen-navigation.md	500
 .agents/skills/habit-lab-autodev/references/autonomous-loop.md	900
 .agents/skills/habit-lab-autodev/references/platforms/android.md	500

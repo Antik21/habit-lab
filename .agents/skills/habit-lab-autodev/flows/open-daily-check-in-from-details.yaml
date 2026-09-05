@@ -1,0 +1,18 @@
+appId: com.denis.habitlab
+---
+# Start state: Experiment Details for the fixed daily-movement experiment.
+- assertVisible:
+    id: habitlab.experiment-details.screen.root
+- tapOn:
+    id: habitlab.experiment-details.action.check-in
+- extendedWaitUntil:
+    visible:
+      id: habitlab.daily-check-in.screen.root
+    timeout: 10000
+- assertVisible:
+    id: habitlab.daily-check-in.action.performed
+- assertVisible:
+    id: habitlab.daily-check-in.action.skipped
+- takeScreenshot: daily-check-in
+- assertVisible:
+    id: habitlab.daily-check-in.screen.root

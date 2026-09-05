@@ -1,0 +1,24 @@
+appId: com.denis.habitlab
+---
+# Start state: Experiment List with the fixed daily-movement seed row.
+- assertVisible:
+    id: habitlab.experiment-list.screen.root
+- assertVisible:
+    id: habitlab.experiment-list.row.daily-movement
+- tapOn:
+    id: habitlab.experiment-list.row.daily-movement
+- extendedWaitUntil:
+    visible:
+      id: habitlab.experiment-details.screen.root
+    timeout: 10000
+- assertVisible:
+    id: habitlab.experiment-details.action.back
+- assertVisible:
+    id: habitlab.experiment-details.action.edit
+- assertVisible:
+    id: habitlab.experiment-details.action.check-in
+- assertVisible:
+    id: habitlab.experiment-details.action.delete
+- takeScreenshot: daily-details
+- assertVisible:
+    id: habitlab.experiment-details.screen.root

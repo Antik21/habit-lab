@@ -43,10 +43,10 @@ val checkMaestroShell = tasks.register<Exec>("checkMaestroShell") {
     description = when {
         isNativeWindows -> "Skipped on native Windows; the Maestro shell contract requires Bash."
         bashExecutable == null -> "Skipped because Bash is unavailable; Maestro shell coverage is not established."
-        else -> "Checks the Maestro Xcode preflight and pinned runner selection."
+        else -> "Checks Maestro navigation flows, Xcode preflight, and pinned runner selection."
     }
     if (!isNativeWindows && bashExecutable != null) {
-        commandLine(bashExecutable, "ui-tests/maestro/tests/xcode-preflight-test.sh")
+        commandLine(bashExecutable, "ui-tests/maestro/tests/maestro-shell-test.sh")
     }
     workingDir(layout.projectDirectory)
 }

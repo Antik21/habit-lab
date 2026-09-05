@@ -57,7 +57,7 @@ internal fun ExperimentListContentSection(
                     title = experiment.name,
                     supportingText = stringResource(experiment.status.labelResource),
                     accessibilityLabel = experiment.name,
-                    automationId = ExperimentListAutomationIds.row,
+                    automationId = experiment.automationId,
                     onClick = { onExperimentClicked(experiment.id) },
                 )
             }
@@ -73,9 +73,10 @@ private fun Preview() {
             content = ContentUiModel.Available(
                 persistentListOf(
                     ExperimentRowUiModel(
-                        ExperimentId("daily-movement"),
-                        "Daily movement",
-                        ExperimentStatusUiModel.ACTIVE,
+                        id = ExperimentId("daily-movement"),
+                        name = "Daily movement",
+                        status = ExperimentStatusUiModel.ACTIVE,
+                        automationId = ExperimentListAutomationIds.dailyMovementRow,
                     ),
                 ),
             ),

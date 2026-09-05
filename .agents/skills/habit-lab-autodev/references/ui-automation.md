@@ -25,4 +25,4 @@ Evidence references must identify the source revision, target platform and virtu
 
 A screenshot alone does not prove an interaction. Pair visual evidence with command/report status and the expected semantic state ID. A broken selector is a product-contract or infrastructure finding, never permission for coordinate fallback.
 
-Do not add reusable flows in this skill scaffold. If the existing reference flow does not cover the frozen acceptance path, use only task-scoped verification authorized by the current change and report the missing reusable adapter/flow boundary for its owning follow-up.
+Reviewed reusable route flows belong in this skill's `flows/` directory. The runner-owned `reference-screens.yaml` remains the sole top-level scenario and composes them with explicit repository-relative `runFlow` paths; its config, runner, and evidence contract remain unchanged. Add a subflow only when the authorized task needs a narrow, reusable path with declared start and semantic end-state assertions. If that boundary is not authorized, report it for its owning follow-up.

@@ -2,36 +2,39 @@ appId: com.denis.habitlab
 name: reference-screens
 tags:
   - cross-platform
-  - den-15
+  - den-18
 ---
-- launchApp:
-    clearState: true
-- extendedWaitUntil:
-    visible:
-      id: habitlab.experiment-list.screen.root
-    timeout: 20000
-- assertVisible:
-    id: habitlab.experiment-list.row
-- tapOn:
-    id: habitlab.experiment-list.row
-    index: 0
-- extendedWaitUntil:
-    visible:
-      id: habitlab.experiment-details.screen.root
-    timeout: 10000
-- tapOn:
-    id: habitlab.experiment-details.action.back
-- assertVisible:
-    id: habitlab.experiment-list.screen.root
+# This is the only runner-owned top-level scenario. DEN-18 subflows are resolved from this file.
+- runFlow:
+    file: ../../../.agents/skills/habit-lab-autodev/flows/launch-reference-fixture.yaml
 
-- tapOn:
-    id: habitlab.experiment-list.action.open-settings
-- extendedWaitUntil:
-    visible:
-      id: habitlab.settings.screen.root
-    timeout: 10000
-- assertVisible:
-    id: habitlab.settings.theme.system
+- runFlow:
+    file: ../../../.agents/skills/habit-lab-autodev/flows/open-daily-details.yaml
+- runFlow:
+    file: ../../../.agents/skills/habit-lab-autodev/flows/back-to-list-from-details.yaml
+
+- runFlow:
+    file: ../../../.agents/skills/habit-lab-autodev/flows/open-sleep-details.yaml
+- runFlow:
+    file: ../../../.agents/skills/habit-lab-autodev/flows/open-editor-from-details.yaml
+- runFlow:
+    file: ../../../.agents/skills/habit-lab-autodev/flows/back-to-details-from-editor.yaml
+- runFlow:
+    file: ../../../.agents/skills/habit-lab-autodev/flows/back-to-list-from-details.yaml
+
+- runFlow:
+    file: ../../../.agents/skills/habit-lab-autodev/flows/open-daily-details.yaml
+- runFlow:
+    file: ../../../.agents/skills/habit-lab-autodev/flows/open-daily-check-in-from-details.yaml
+- runFlow:
+    file: ../../../.agents/skills/habit-lab-autodev/flows/back-to-details-from-daily-check-in.yaml
+- runFlow:
+    file: ../../../.agents/skills/habit-lab-autodev/flows/record-daily-check-in.yaml
+- runFlow:
+    file: ../../../.agents/skills/habit-lab-autodev/flows/back-to-list-from-details.yaml
+
+- runFlow:
+    file: ../../../.agents/skills/habit-lab-autodev/flows/open-settings.yaml
 - runFlow:
     when:
       platform: Android
@@ -40,94 +43,16 @@ tags:
     when:
       platform: iOS
     file: platform/ios-edge-back.yaml
-- extendedWaitUntil:
-    visible:
-      id: habitlab.experiment-list.screen.root
-    timeout: 10000
 
-- tapOn:
-    id: habitlab.experiment-list.action.create
-- extendedWaitUntil:
-    visible:
-      id: habitlab.experiment-editor.screen.root
-    timeout: 10000
-- assertVisible:
-    id: habitlab.experiment-editor.state.metric.unset
-- tapOn:
-    id: habitlab.experiment-editor.field.name
-- inputText: MaestroReference
-- tapOn:
-    id: habitlab.experiment-editor.action.metric
-- extendedWaitUntil:
-    visible:
-      id: habitlab.metric-picker.screen.root
-    timeout: 10000
-- tapOn:
-    id: habitlab.metric-picker.action.energy
-- extendedWaitUntil:
-    visible:
-      id: habitlab.experiment-editor.state.metric.daily-energy
-    timeout: 10000
-- tapOn:
-    id: habitlab.experiment-editor.action.save
-- extendedWaitUntil:
-    visible:
-      id: habitlab.experiment-details.screen.root
-    timeout: 15000
-- takeScreenshot: experiment-details
-
-- tapOn:
-    id: habitlab.experiment-details.action.check-in
-- extendedWaitUntil:
-    visible:
-      id: habitlab.daily-check-in.screen.root
-    timeout: 10000
-- assertVisible:
-    id: habitlab.daily-check-in.action.performed
-- assertVisible:
-    id: habitlab.daily-check-in.action.skipped
-- takeScreenshot: daily-check-in
-- tapOn:
-    id: habitlab.daily-check-in.action.skipped
-- extendedWaitUntil:
-    visible:
-      id: habitlab.daily-check-in.state.outcome.skipped
-    timeout: 10000
-- assertVisible:
-    id: habitlab.daily-check-in.state.outcome.skipped
-- tapOn:
-    id: habitlab.daily-check-in.action.save
-- extendedWaitUntil:
-    visible:
-      id: habitlab.experiment-details.screen.root
-    timeout: 15000
-
-- tapOn:
-    id: habitlab.experiment-details.action.delete
-- extendedWaitUntil:
-    visible:
-      id: habitlab.confirm-delete.screen.root
-    timeout: 10000
-- tapOn:
-    id: habitlab.confirm-delete.action.cancel
-- extendedWaitUntil:
-    visible:
-      id: habitlab.experiment-details.screen.root
-    timeout: 10000
-- assertVisible:
-    id: habitlab.experiment-details.action.delete
-- tapOn:
-    id: habitlab.experiment-details.action.delete
-- extendedWaitUntil:
-    visible:
-      id: habitlab.confirm-delete.screen.root
-    timeout: 10000
-- tapOn:
-    id: habitlab.confirm-delete.action.confirm
-- extendedWaitUntil:
-    visible:
-      id: habitlab.experiment-list.screen.root
-    timeout: 15000
-- takeScreenshot: reference-screens-final
+- runFlow:
+    file: ../../../.agents/skills/habit-lab-autodev/flows/open-create-editor.yaml
+- runFlow:
+    file: ../../../.agents/skills/habit-lab-autodev/flows/select-daily-energy.yaml
+- runFlow:
+    file: ../../../.agents/skills/habit-lab-autodev/flows/save-reference-draft-to-details.yaml
+- runFlow:
+    file: ../../../.agents/skills/habit-lab-autodev/flows/cancel-delete-from-details.yaml
+- runFlow:
+    file: ../../../.agents/skills/habit-lab-autodev/flows/confirm-delete-to-list.yaml
 - assertVisible:
     id: habitlab.experiment-list.screen.root

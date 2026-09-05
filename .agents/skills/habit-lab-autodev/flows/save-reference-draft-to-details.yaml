@@ -1,0 +1,19 @@
+appId: com.denis.habitlab
+---
+# Start state: a new unsaved Experiment Editor with Daily Energy selected and an empty name.
+- assertVisible:
+    id: habitlab.experiment-editor.screen.root
+- assertVisible:
+    id: habitlab.experiment-editor.state.metric.daily-energy
+- tapOn:
+    id: habitlab.experiment-editor.field.name
+- eraseText
+- inputText: MaestroReference
+- tapOn:
+    id: habitlab.experiment-editor.action.save
+- extendedWaitUntil:
+    visible:
+      id: habitlab.experiment-details.screen.root
+    timeout: 15000
+- assertVisible:
+    id: habitlab.experiment-details.screen.root

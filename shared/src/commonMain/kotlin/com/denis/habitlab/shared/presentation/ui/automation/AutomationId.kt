@@ -48,6 +48,8 @@ enum class AutomationId(
     ExperimentListEmpty("habitlab.experiment-list.state.empty"),
     ExperimentListError("habitlab.experiment-list.state.error"),
     ExperimentListRow("habitlab.experiment-list.row"),
+    ExperimentListDailyMovementRow("habitlab.experiment-list.row.daily-movement"),
+    ExperimentListSleepRoutineRow("habitlab.experiment-list.row.sleep-routine"),
     ExperimentDetailsScreenRoot("habitlab.experiment-details.screen.root"),
     ExperimentDetailsBack("habitlab.experiment-details.action.back"),
     ExperimentDetailsEdit("habitlab.experiment-details.action.edit"),
@@ -123,7 +125,8 @@ object ExperimentListAutomationIds {
     val loading = AutomationId.ExperimentListLoading
     val empty = AutomationId.ExperimentListEmpty
     val error = AutomationId.ExperimentListError
-    val row = AutomationId.ExperimentListRow
+    val dailyMovementRow = AutomationId.ExperimentListDailyMovementRow
+    val sleepRoutineRow = AutomationId.ExperimentListSleepRoutineRow
 }
 
 /** Fixed selectors exposed by the shared production Navigation 3 shell. */

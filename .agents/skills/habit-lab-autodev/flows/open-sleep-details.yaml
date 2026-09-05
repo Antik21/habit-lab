@@ -1,0 +1,17 @@
+appId: com.denis.habitlab
+---
+# Start state: Experiment List with the fixed sleep-routine draft row.
+- assertVisible:
+    id: habitlab.experiment-list.screen.root
+- assertVisible:
+    id: habitlab.experiment-list.row.sleep-routine
+- tapOn:
+    id: habitlab.experiment-list.row.sleep-routine
+- extendedWaitUntil:
+    visible:
+      id: habitlab.experiment-details.screen.root
+    timeout: 10000
+- assertVisible:
+    id: habitlab.experiment-details.action.edit
+- assertVisible:
+    id: habitlab.experiment-details.screen.root

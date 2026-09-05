@@ -1,0 +1,15 @@
+appId: com.denis.habitlab
+---
+# Start state: Experiment Details for an editable draft.
+- assertVisible:
+    id: habitlab.experiment-details.screen.root
+- assertVisible:
+    id: habitlab.experiment-details.action.edit
+- tapOn:
+    id: habitlab.experiment-details.action.edit
+- extendedWaitUntil:
+    visible:
+      id: habitlab.experiment-editor.screen.root
+    timeout: 10000
+- assertVisible:
+    id: habitlab.experiment-editor.screen.root
