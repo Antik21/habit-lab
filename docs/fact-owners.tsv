@@ -1,0 +1,14 @@
+# fact-id<TAB>owner Markdown path<TAB>canonical exact signature
+documentation-governance	.agents/docs/00-routing.md	<!-- canonical-signature: documentation-governance-v1 -->
+toolchain	.agents/docs/01-stack-toolchain.md	<!-- canonical-signature: toolchain-v1 -->
+package-boundaries	.agents/docs/02-architecture-boundaries.md	<!-- canonical-signature: package-boundaries-v1 -->
+model-ownership	.agents/docs/02-architecture-boundaries.md	<!-- canonical-signature: model-ownership-v1 -->
+presentation-navigation	.agents/docs/03-presentation-navigation.md	<!-- canonical-signature: presentation-navigation-v1 -->
+route-restoration	.agents/docs/03-presentation-navigation.md	<!-- canonical-signature: route-restoration-v1 -->
+room-storage	.agents/docs/04-data-offline-first.md	<!-- canonical-signature: room-storage-v1 -->
+android-boundary	.agents/docs/05-platform-android.md	<!-- canonical-signature: android-boundary-v1 -->
+ios-boundary	.agents/docs/06-platform-ios.md	<!-- canonical-signature: ios-boundary-v1 -->
+testing-policy	.agents/docs/07-testing-verification.md	<!-- canonical-signature: testing-policy-v1 -->
+dependency-policy	.agents/docs/08-libraries-licenses.md	<!-- canonical-signature: dependency-policy-v1 -->
+planned-capabilities	.agents/docs/08-libraries-licenses.md	<!-- canonical-signature: planned-capabilities-v1 -->
+adr-policy	docs/adr/README.md	<!-- canonical-signature: adr-policy-v1 -->

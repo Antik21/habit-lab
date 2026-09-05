@@ -62,3 +62,9 @@ The previous iOS 16 runtime limitation remains operational risk rather than a di
 target builds for iOS 16.0, but a runtime validation still requires an installed iOS 16 simulator or
 device. The current iOS 26.5 simulator and Android runtime should exercise process kill/relaunch
 with details, editor/check-in, Settings, and dialog routes before release.
+
+## Related current policy
+
+- [Presentation and navigation](../../.agents/docs/03-presentation-navigation.md)
+- [Android host and adapters](../../.agents/docs/05-platform-android.md)
+- [iOS host and adapters](../../.agents/docs/06-platform-ios.md)
