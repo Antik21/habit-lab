@@ -11,13 +11,13 @@ Execute one bounded change through this sequence. Preserve repository policy and
 
 ## 2. Intake and frozen checklist
 
-Collect the task source, acceptance criteria, dependencies, requested platforms, affected ownership boundaries, and required evidence. Resolve material ambiguity before editing. Convert these facts into a finite checklist with observable assertions and a regression boundary, then freeze it.
+Collect the task source, acceptance criteria, dependencies, requested platforms, affected ownership boundaries, and required evidence. Resolve material ambiguity before editing. Initialize the [checklist gate](checklist-gate.md), append finite observable assertions and a regression boundary, then freeze it before implementation.
 
-After implementation begins, do not silently add, remove, reinterpret, or mark checklist items complete. New task facts require an explicit recorded revision and re-review. The frozen core—this skill, its acceptance evaluator, and any gate definition—cannot self-patch during a run.
+After implementation begins, do not silently add, remove, reinterpret, or mark checklist items complete. Add a newly discovered regression separately with its reason; it invalidates the prior review. The frozen core—this skill, its acceptance evaluator, and the gate definition—cannot self-patch during a run.
 
 ## 3. Implement
 
-Use the selected task-type and platform references. Make the smallest production and test changes that satisfy the frozen checklist. Preserve shared/common ownership and follow the root route for each touched boundary. Do not add speculative infrastructure for later AutoDev phases.
+Use the selected task-type and platform references. Make the smallest production and test changes that satisfy the frozen checklist. Preserve shared/common ownership and follow the root route for each touched boundary. Record evidence attempts through the gate; follow its reread/hypothesis rule after repeated failures. Do not add speculative infrastructure for later AutoDev phases.
 
 ## 4. Build, deploy, navigate, verify
 
@@ -33,7 +33,7 @@ Stop only processes launched by this run. Release only reservations acquired by 
 
 ## 7. Draft PR or report
 
-Only a passing gate with complete evidence permits `success` and, when authorized, a Draft PR. This skill never stabilizes or merges that PR; those actions need a separate explicit command.
+Only `finish --outcome success` with complete evidence permits `success` and marks a Draft PR eligible. The gate never creates a PR. This skill never stabilizes or merges an authorized Draft PR; those actions need a separate explicit command.
 
 Choose one terminal outcome:
 
