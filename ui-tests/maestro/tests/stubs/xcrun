@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+
+if [[ "$#" == 2 && "$1" == "--find" && "$2" == "xcodebuild" ]]; then
+    printf '%s\n' "${STUB_XCODEBUILD:?}"
+    exit 0
+fi
+
+printf 'developer_dir=%s xcrun %s\n' "${DEVELOPER_DIR:?}" "$*" >>"${STUB_OPERATION_LOG:?}"
+
+if [[ "$#" == 4 && "$1" == "simctl" && "$2" == "list" && "$3" == "devices" && "$4" == "available" ]]; then
+    printf 'iPhone Stub (%s) (Booted)\n' "${STUB_DEVICE_ID:?}"
+elif [[ "$#" == 4 && "$1" == "simctl" && "$2" == "getenv" ]]; then
+    printf 'iPhone15,2\n'
+elif [[ "$#" -ge 2 && "$1" == "simctl" && "$2" == "terminate" ]]; then
+    exit "${STUB_TERMINATE_EXIT:-0}"
+fi
+
+exit "${STUB_XCRUN_EXIT:-0}"

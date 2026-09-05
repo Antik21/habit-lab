@@ -14,7 +14,7 @@ Future reviewed navigation nodes belong in this directory as narrowly scoped Mar
 
 Each evidence record contains the platform, source revision, terminal success and passing-gate status, exact emulator/simulator target identifier, relevant target/toolchain configuration, and a repository-relative canonical owner-defined artifact location. Maestro evidence uses `build/maestro/<run-id>/<platform>`. The record must be attributable and secret-free.
 
-If a node lists more than one supported platform, it must contain a separate terminal-success, passing-gate evidence record for every listed platform. Do not list a platform without its own qualifying evidence.
+For every listed supported platform, the node must contain a separate terminal-success, passing-gate evidence record. Do not list any platform without its own qualifying evidence.
 
 Nodes must not contain localized labels, runtime/user values, coordinates for app controls, credentials, absolute machine paths, timing guesses presented as guarantees, or copied owner policy. The only system-gesture coordinate exception must reference [ADR 0003](../../../../../docs/adr/0003-maestro-cross-platform-ui-automation.md).
 

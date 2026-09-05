@@ -23,3 +23,15 @@ val checkDocumentation = tasks.register<CheckDocumentationTask>("checkDocumentat
     factOwnersFile.set(layout.projectDirectory.file("docs/fact-owners.tsv"))
     budgetsFile.set(layout.projectDirectory.file("docs/document-budgets.tsv"))
 }
+
+val isNativeWindows = System.getProperty("os.name").startsWith("Windows", ignoreCase = true)
+
+val checkMaestroShell = tasks.register<Exec>("checkMaestroShell") {
+    group = "verification"
+    description = "Checks the Maestro Xcode preflight and pinned runner selection."
+    onlyIf("requires Bash and is skipped on native Windows") {
+        !isNativeWindows
+    }
+    workingDir(layout.projectDirectory)
+    commandLine("bash", "ui-tests/maestro/tests/xcode-preflight-test.sh")
+}

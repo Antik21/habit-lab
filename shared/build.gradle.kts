@@ -120,4 +120,5 @@ val checkArchitectureBoundaries = tasks.register(
 tasks.named("check") {
     dependsOn(checkArchitectureBoundaries)
     dependsOn(rootProject.tasks.named("checkDocumentation"))
+    dependsOn(rootProject.tasks.named("checkMaestroShell"))
 }

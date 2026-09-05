@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 
-parse_xcode_version() {
+habitlab_parse_xcode_version() {
     printf '%s\n' "$1" |
         sed -n '1s/^Xcode \([0-9][0-9]*\)\.\([0-9][0-9]*\).*$/\1.\2/p'
 }
 
-xcode_version_is_at_least() {
+habitlab_xcode_version_is_at_least() {
     local actual_version="$1"
     local required_major="$2"
     local required_minor="$3"
