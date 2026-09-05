@@ -19,9 +19,9 @@ Entry-owned UI actions that leave the screen are accepted only while their entry
 effects such as `PopToRoot` are not lifecycle-gated and cannot be lost under a dialog or transition.
 
 An experiment route passes its typed ID only. `NavigationExperimentViewModel` observes a current
-`ExperimentProjection` via the domain `ExperimentProjectionObserver` abstraction. The present
-in-memory implementation is a replaceable DEN-10 scaffold for a later persisted DEN-11 projection;
-no destination restores serialized screen state.
+`ExperimentProjection` via the domain `ExperimentProjectionObserver` abstraction. The implementation
+now reads the persisted Room projection delivered by DEN-11; no destination restores serialized
+screen state.
 
 ## Dialog and safety behavior
 

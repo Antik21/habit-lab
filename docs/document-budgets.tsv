@@ -1,0 +1,21 @@
+# Markdown path<TAB>maximum words
+AGENTS.md	350
+README.md	450
+.agents/rules/compose.md	900
+.agents/docs/00-routing.md	700
+.agents/docs/01-stack-toolchain.md	700
+.agents/docs/02-architecture-boundaries.md	700
+.agents/docs/03-presentation-navigation.md	700
+.agents/docs/04-data-offline-first.md	700
+.agents/docs/05-platform-android.md	700
+.agents/docs/06-platform-ios.md	700
+.agents/docs/07-testing-verification.md	700
+.agents/docs/08-libraries-licenses.md	700
+.agents/docs/09-common-cases.md	650
+docs/adr/README.md	700
+docs/adr/template.md	700
+docs/adr/0001-navigation3-ios-edge-adapter.md	1200
+docs/adr/0002-navigation3-ios-restoration-runtime.md	1400
+docs/data/den-11-room-offline-first.md	2200
+docs/navigation/den-10-production-navigation-shell.md	1800
+docs/spikes/den-9-navigation3-kmp.md	3000

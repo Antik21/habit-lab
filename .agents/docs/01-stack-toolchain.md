@@ -1,0 +1,26 @@
+# Stack and toolchain
+
+<!-- fact-owner: toolchain -->
+<!-- canonical-signature: toolchain-v1 -->
+
+The wrapper uses Gradle 9.3.1. Project plugins use AGP 9.1.1 and Kotlin/serialization/Compose compiler 2.4.10; Compose Multiplatform is 1.12.0. Android compiles with SDK 37, has minimum SDK 33 and target SDK 36, and emits JVM 17 bytecode.
+
+Kotlin targets are Android, iOS arm64 device, and iOS arm64 simulator. `iosX64` is configured only on Intel macOS. The Xcode project deploys to iOS 16.0. CI selects Xcode 26.4.1 and Temurin JDK 17. A contributor's installed Xcode or JDK may differ; CI does not verify JDK 25.
+
+`./gradlew --version` reports Gradle's embedded Kotlin (currently 2.2.21), not the project's Kotlin plugin version. Read `gradle/libs.versions.toml` for project versions.
+
+## Commands
+
+```sh
+./gradlew checkDocumentation
+./gradlew :buildSrc:test checkDocumentation --stacktrace
+./gradlew :shared:check
+./gradlew :androidApp:assembleDebug
+./gradlew :shared:iosSimulatorArm64Test
+./gradlew :shared:connectedAndroidDeviceTest
+xcodebuild -project iosApp/iosApp.xcodeproj -scheme iosApp -sdk iphonesimulator -configuration Debug build
+```
+
+`:shared:check` includes architecture and documentation checks. Android device tests require one API 33+ device; CI uses an API 36 Google APIs x86_64 emulator. The iOS command runs on an Apple Silicon simulator target; Intel hosts use the configured x64 target. See [testing and verification](07-testing-verification.md) before choosing a subset.
+
+Dependencies are centralized in `gradle/libs.versions.toml`; policy for adding them is owned by [libraries and licenses](08-libraries-licenses.md).
