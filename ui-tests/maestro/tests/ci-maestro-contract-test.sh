@@ -290,8 +290,193 @@ assert_step_extraction_negative_probe() {
     fi
 }
 
+cleanup_inventory_probe() {
+    if [[ -n "${INVENTORY_PROBE_ROOT:-}" && -d "$INVENTORY_PROBE_ROOT" ]]; then
+        find "$INVENTORY_PROBE_ROOT" -depth -delete
+    fi
+}
+
+cleanup_inventory_test_artifacts() {
+    cleanup_inventory_probe
+    if [[ -n "${INVENTORY_CREATE_SCRIPT:-}" && -f "$INVENTORY_CREATE_SCRIPT" ]]; then
+        find "$INVENTORY_CREATE_SCRIPT" -depth -delete
+    fi
+}
+
+extract_create_step_run_script() {
+    local step="$1"
+    local destination="$2"
+
+    if ! printf '%s\n' "$step" | awk '
+        $0 == "        run: |" {
+            found = 1
+            next
+        }
+        found {
+            if (substr($0, 1, 10) != "          ") {
+                malformed = 1
+                exit
+            }
+            print substr($0, 11)
+        }
+        END { exit(found && !malformed ? 0 : 1) }
+    ' >"$destination"; then
+        fail_test 'could not extract the executable iOS simulator creation step'
+    fi
+    chmod +x "$destination"
+}
+
+write_inventory_probe_stubs() {
+    local stub_dir="$1"
+
+    mkdir -p "$stub_dir"
+    printf '%s\n' \
+        '#!/usr/bin/env bash' \
+        'set -Eeuo pipefail' \
+        'printf "xcrun %s\\n" "$*" >> "${STUB_XCRUN_LOG:?}"' \
+        'case "$*" in' \
+        '    "simctl list runtimes -j") printf "{\\\"runtimes\\\":[]}\\n" ;;' \
+        '    "simctl list devicetypes -j") printf "{\\\"devicetypes\\\":[]}\\n" ;;' \
+        '    "simctl list devices -j") printf "{\\\"devices\\\":{}}\\n" ;;' \
+        '    "simctl create "*) printf "00000000-0000-0000-0000-000000000000\\n" ;;' \
+        '    *) printf "unexpected xcrun invocation: %s\\n" "$*" >&2; exit 97 ;;' \
+        'esac' >"$stub_dir/xcrun"
+    printf '%s\n' \
+        '#!/usr/bin/env bash' \
+        'set -Eeuo pipefail' \
+        'case "$*" in' \
+        '    *".runtimes[]"*)' \
+        '        if [[ "$*" == -c* ]]; then printf "[]\\n"; else printf "%s\\n" "${STUB_RUNTIME_MATCH_COUNT:?}"; fi' \
+        '        ;;' \
+        '    *".devicetypes[]"*)' \
+        '        if [[ "$*" == -c* ]]; then printf "[]\\n"; else printf "%s\\n" "${STUB_DEVICE_TYPE_MATCH_COUNT:?}"; fi' \
+        '        ;;' \
+        '    *".devices[]"*) exit 0 ;;' \
+        '    *) printf "unexpected jq invocation: %s\\n" "$*" >&2; exit 97 ;;' \
+        'esac' >"$stub_dir/jq"
+    chmod +x "$stub_dir/xcrun" "$stub_dir/jq"
+}
+
+write_mktemp_failure_stub() {
+    local stub_dir="$1"
+
+    printf '%s\n' \
+        '#!/usr/bin/env bash' \
+        'set -Eeuo pipefail' \
+        'printf "mktemp failure\\n" >&2' \
+        'exit 73' >"$stub_dir/mktemp"
+    chmod +x "$stub_dir/mktemp"
+}
+
+assert_inventory_failure_is_diagnostic() {
+    local create_script="$1"
+    local inventory_kind="$2"
+    local runtime_match_count=1
+    local device_type_match_count=1
+    local expected_identifier=''
+    local output=''
+    local xcrun_log=''
+    local stub_dir=''
+
+    case "$inventory_kind" in
+        runtime)
+            runtime_match_count=0
+            expected_identifier='com.apple.CoreSimulator.SimRuntime.iOS-26-4'
+            ;;
+        device-type)
+            device_type_match_count=0
+            expected_identifier='com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro'
+            ;;
+        *) fail_test "unknown inventory probe kind: $inventory_kind" ;;
+    esac
+
+    INVENTORY_PROBE_ROOT="$(mktemp -d)"
+    stub_dir="$INVENTORY_PROBE_ROOT/stubs"
+    xcrun_log="$INVENTORY_PROBE_ROOT/xcrun.log"
+    mkdir -p "$INVENTORY_PROBE_ROOT/runner-temp"
+    write_inventory_probe_stubs "$stub_dir"
+
+    if output="$(env \
+        RUNNER_TEMP="$INVENTORY_PROBE_ROOT/runner-temp" \
+        GITHUB_RUN_ID='inventory-probe' \
+        GITHUB_RUN_ATTEMPT='1' \
+        GITHUB_OUTPUT="$INVENTORY_PROBE_ROOT/github-output" \
+        STUB_RUNTIME_MATCH_COUNT="$runtime_match_count" \
+        STUB_DEVICE_TYPE_MATCH_COUNT="$device_type_match_count" \
+        STUB_XCRUN_LOG="$xcrun_log" \
+        PATH="$stub_dir:$PATH" \
+        "$BASH" "$create_script" 2>&1)"; then
+        cleanup_inventory_probe
+        INVENTORY_PROBE_ROOT=''
+        fail_test "$inventory_kind inventory mismatch unexpectedly reached a successful create step"
+    fi
+    if ! printf '%s\n' "$output" | grep -Fq -- "$expected_identifier"; then
+        cleanup_inventory_probe
+        INVENTORY_PROBE_ROOT=''
+        fail_test "$inventory_kind inventory mismatch did not identify $expected_identifier"
+    fi
+    if ! printf '%s\n' "$output" | grep -Eiq 'error|unavailable|missing|not found|expected'; then
+        cleanup_inventory_probe
+        INVENTORY_PROBE_ROOT=''
+        fail_test "$inventory_kind inventory mismatch did not provide an actionable diagnostic"
+    fi
+    if [[ -f "$xcrun_log" ]] && grep -Fq 'simctl create' "$xcrun_log"; then
+        cleanup_inventory_probe
+        INVENTORY_PROBE_ROOT=''
+        fail_test "$inventory_kind inventory mismatch reached simctl create"
+    fi
+
+    cleanup_inventory_probe
+    INVENTORY_PROBE_ROOT=''
+}
+
+assert_mktemp_failure_stops_before_simctl_create() {
+    local create_script="$1"
+    local output=''
+    local xcrun_log=''
+    local stub_dir=''
+
+    INVENTORY_PROBE_ROOT="$(mktemp -d)"
+    stub_dir="$INVENTORY_PROBE_ROOT/stubs"
+    xcrun_log="$INVENTORY_PROBE_ROOT/xcrun.log"
+    mkdir -p "$INVENTORY_PROBE_ROOT/runner-temp"
+    write_inventory_probe_stubs "$stub_dir"
+    write_mktemp_failure_stub "$stub_dir"
+
+    if output="$(env \
+        RUNNER_TEMP="$INVENTORY_PROBE_ROOT/runner-temp" \
+        GITHUB_RUN_ID='mktemp-probe' \
+        GITHUB_RUN_ATTEMPT='1' \
+        GITHUB_OUTPUT="$INVENTORY_PROBE_ROOT/github-output" \
+        STUB_RUNTIME_MATCH_COUNT=1 \
+        STUB_DEVICE_TYPE_MATCH_COUNT=1 \
+        STUB_XCRUN_LOG="$xcrun_log" \
+        PATH="$stub_dir:$PATH" \
+        "$BASH" "$create_script" 2>&1)"; then
+        cleanup_inventory_probe
+        INVENTORY_PROBE_ROOT=''
+        fail_test 'mktemp failure unexpectedly reached a successful create step'
+    fi
+    if ! printf '%s\n' "$output" | grep -Eiq 'error.*(mktemp|temporary|output)|could not.*(mktemp|temporary|output)'; then
+        cleanup_inventory_probe
+        INVENTORY_PROBE_ROOT=''
+        fail_test 'mktemp failure did not produce a direct create-output diagnostic'
+    fi
+    if [[ -f "$xcrun_log" ]] && grep -Fq 'simctl create' "$xcrun_log"; then
+        cleanup_inventory_probe
+        INVENTORY_PROBE_ROOT=''
+        fail_test 'mktemp failure reached simctl create'
+    fi
+
+    cleanup_inventory_probe
+    INVENTORY_PROBE_ROOT=''
+}
+
 [[ -f "$WORKFLOW" ]] || fail_test 'shared CI workflow is missing'
 assert_step_extraction_negative_probe
+INVENTORY_PROBE_ROOT=''
+INVENTORY_CREATE_SCRIPT=''
+trap cleanup_inventory_test_artifacts EXIT
 
 load_job ios_job ios-simulator
 load_job android_job android-emulator
@@ -319,8 +504,8 @@ require_code_line "$ios_create" "readonly runtime_identifier='com.apple.CoreSimu
     'iOS simulator creation step must pin the iOS 26.4 runtime'
 require_code_line "$ios_create" "readonly device_type_identifier='com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro'" \
     'iOS simulator creation step must pin the iPhone 17 Pro device type'
-require_code_line "$ios_create" 'readonly create_output_file="$(mktemp "$RUNNER_TEMP/habit-lab-den21-simctl-create-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.XXXXXX")"' \
-    'iOS simulator creation step must snapshot simctl output in a run-owned file'
+require_code_fragment "$ios_create" 'mktemp "$RUNNER_TEMP/habit-lab-den21-simctl-create-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.XXXXXX"' \
+    'iOS simulator creation step must create a run-owned simctl snapshot file'
 require_code_line "$ios_create" 'candidate="$(tr -d '\''\r\n'\'' < "$create_output_file")"' \
     'iOS simulator creation step must read the created UDID from its snapshot'
 require_code_line "$ios_create" 'xcrun simctl create "$simulator_name" "$device_type_identifier" "$runtime_identifier" > "$create_output_file"' \
@@ -344,6 +529,13 @@ require_code_line "$ios_create" 'xcrun simctl delete "$cleanup_udid" >/dev/null 
     'iOS simulator creation trap must delete only its candidate'
 require_code_line "$ios_create" "printf 'name=%s\\nudid=%s\\n' \"\$simulator_name\" \"\$created_udid\" >> \"\$GITHUB_OUTPUT\"" \
     'iOS simulator creation step must publish its owned simulator outputs'
+INVENTORY_CREATE_SCRIPT="$(mktemp)"
+extract_create_step_run_script "$ios_create" "$INVENTORY_CREATE_SCRIPT"
+assert_inventory_failure_is_diagnostic "$INVENTORY_CREATE_SCRIPT" runtime
+assert_inventory_failure_is_diagnostic "$INVENTORY_CREATE_SCRIPT" device-type
+assert_mktemp_failure_stops_before_simctl_create "$INVENTORY_CREATE_SCRIPT"
+cleanup_inventory_test_artifacts
+INVENTORY_CREATE_SCRIPT=''
 
 load_step ios_runner "$ios_job" 'Run Maestro parity smoke on the job-owned iOS simulator'
 require_code_line "$ios_runner" 'shell: bash' 'iOS Maestro runner step must use Bash'

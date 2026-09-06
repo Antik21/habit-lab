@@ -89,18 +89,84 @@ jobs:
         run: |
           set -Eeuo pipefail
           readonly runtime_identifier='com.apple.CoreSimulator.SimRuntime.iOS-26-4'
+          readonly runtime_name='iOS 26.4'
+          readonly runtime_version='26.4.1'
           readonly device_type_identifier='com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro'
+          readonly device_type_name='iPhone 17 Pro'
           readonly simulator_name="HabitLab-DEN21-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          xcrun simctl list runtimes -j | jq -e --arg identifier "$runtime_identifier" \
-            '[.runtimes[] | select(.identifier == $identifier and .name == "iOS 26.4" and .version == "26.4" and .isAvailable == true)] | length == 1' \
-            >/dev/null
-          xcrun simctl list devicetypes -j | jq -e --arg identifier "$device_type_identifier" \
-            '[.devicetypes[] | select(.identifier == $identifier and .name == "iPhone 17 Pro")] | length == 1' \
-            >/dev/null
+          if ! runtime_inventory="$(xcrun simctl list runtimes -j)"; then
+            printf 'error: could not read selected Xcode runtime inventory for %s\n' "$runtime_identifier" >&2
+            exit 1
+          fi
+          if ! device_type_inventory="$(xcrun simctl list devicetypes -j)"; then
+            printf 'error: could not read selected Xcode device-type inventory for %s\n' \
+              "$device_type_identifier" >&2
+            exit 1
+          fi
+          readonly runtime_inventory device_type_inventory
+          if ! runtime_entries="$(printf '%s\n' "$runtime_inventory" | jq -c --arg identifier "$runtime_identifier" '
+              [.runtimes[] | select(.identifier == $identifier) | {
+                identifier,
+                name,
+                version,
+                buildversion,
+                isAvailable,
+                availability
+              }]
+            ')"; then
+            printf 'error: could not inspect runtime %s; required device type is %s\n' \
+              "$runtime_identifier" "$device_type_identifier" >&2
+            exit 1
+          fi
+          if ! runtime_match_count="$(printf '%s\n' "$runtime_inventory" | jq -r \
+              --arg identifier "$runtime_identifier" \
+              --arg name "$runtime_name" \
+              --arg version "$runtime_version" '
+                [.runtimes[] | select(
+                  .identifier == $identifier and
+                  .name == $name and
+                  .version == $version and
+                  .isAvailable == true
+                )] | length
+              ')"; then
+            printf 'error: could not resolve runtime %s; required device type is %s\n' \
+              "$runtime_identifier" "$device_type_identifier" >&2
+            exit 1
+          fi
+          if [[ "$runtime_match_count" != 1 ]]; then
+            printf 'error: selected Xcode must provide one available %s %s runtime (%s); required device type is %s; matching entries: %s\n' \
+              "$runtime_name" "$runtime_version" "$runtime_identifier" "$device_type_identifier" "$runtime_match_count" >&2
+            printf 'runtime entries for %s: %s\n' "$runtime_identifier" "$runtime_entries" >&2
+            exit 1
+          fi
+          if ! device_type_entries="$(printf '%s\n' "$device_type_inventory" | jq -c --arg identifier "$device_type_identifier" '
+              [.devicetypes[] | select(.identifier == $identifier) | {identifier, name}]
+            ')"; then
+            printf 'error: could not inspect device type %s\n' "$device_type_identifier" >&2
+            exit 1
+          fi
+          if ! device_type_match_count="$(printf '%s\n' "$device_type_inventory" | jq -r \
+              --arg identifier "$device_type_identifier" \
+              --arg name "$device_type_name" '
+                [.devicetypes[] | select(.identifier == $identifier and .name == $name)] | length
+              ')"; then
+            printf 'error: could not resolve device type %s\n' "$device_type_identifier" >&2
+            exit 1
+          fi
+          if [[ "$device_type_match_count" != 1 ]]; then
+            printf 'error: selected Xcode must provide one %s device type; matching entries: %s\n' \
+              "$device_type_name" "$device_type_match_count" >&2
+            printf 'device-type entries for %s: %s\n' "$device_type_identifier" "$device_type_entries" >&2
+            exit 1
+          fi
           readonly preexisting_named_simulator_uuids="$(xcrun simctl list devices -j | jq -r --arg name "$simulator_name" '
             [.devices[]?[]? | select(.name == $name) | .udid] | .[]
           ')"
-          readonly create_output_file="$(mktemp "$RUNNER_TEMP/habit-lab-den21-simctl-create-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.XXXXXX")"
+          if ! create_output_file="$(mktemp "$RUNNER_TEMP/habit-lab-den21-simctl-create-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.XXXXXX")"; then
+            printf '%s\n' 'error: could not create the temporary simctl output file' >&2
+            exit 1
+          fi
+          readonly create_output_file
           created_udid=''
           is_uuid() {
             local candidate="${1:-}"
