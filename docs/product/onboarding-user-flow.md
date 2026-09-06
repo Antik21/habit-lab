@@ -11,7 +11,7 @@
 
 Канонический путь: **Launch Gate** (невидимое решение) → **Welcome** → **Outcome** → **Context** → **Recommended protocols** → **Health explanation** → platform permission **или** manual → **Status/coverage** → **Setup** → **Today**.
 
-Launch Gate — не Screen Spec: это решение реализации [DEN-33](https://linear.app/denis-apps/issue/DEN-33). Нового пользователя оно направляет в Welcome, возобновляемый draft — в его checkpoint, завершённый onboarding — в Today. Today — только destination после Setup в [DEN-28](https://linear.app/denis-apps/issue/DEN-28) и реализация [DEN-41](https://linear.app/denis-apps/issue/DEN-41), не onboarding Screen Spec.
+Launch Gate — не Screen Spec: это решение реализации [DEN-33](https://linear.app/denis-apps/issue/DEN-33). Нового пользователя оно направляет в Welcome, возобновляемый draft — в его checkpoint, а completed marker — в Today только после актуального подтверждения ровно одного active experiment. Inconsistent completed checkpoint восстанавливается в recovery mode существующего [DEN-28](https://linear.app/denis-apps/issue/DEN-28) Setup при 0 active и валидном draft, блокируется там же при >1 active либо откатывается к ближайшему достижимому upstream шагу. Setup recovery — не новый destination. Today — только destination после Setup и реализация [DEN-41](https://linear.app/denis-apps/issue/DEN-41), не onboarding Screen Spec.
 
 Внутри Welcome до любого product answer обязательны состояние и явное подтверждение 18+. Отказ ведёт в safe exit/info; profile и experiment не создаются. Отдельного eligibility Screen Spec нет. Checkpoint хранит только его устойчивое значение: шаг, typed IDs и draft, но не `UiState`; при relaunch актуальные данные перечитываются и flow заново проверяет достижимость шага.
 
@@ -24,9 +24,9 @@ Manual никогда не перескакивает в Setup: он прихо�
 | Screen Spec | Временный owner | Обязательные outgoing transitions |
 | --- | --- | --- |
 | Welcome | [DEN-26](https://linear.app/denis-apps/issue/DEN-26) | 18+ подтверждено → Outcome; отказ → safe exit/info; Back/relaunch → Launch Gate. |
-| Outcome | [DEN-25](https://linear.app/denis-apps/issue/DEN-25) | valid или изменённый Goal → Context для подтверждения; Back → Welcome. |
-| Context | [DEN-27](https://linear.app/denis-apps/issue/DEN-27) | valid или изменённый Context → Protocols/recompute; Back → Outcome. |
-| Recommended protocols | [DEN-29](https://linear.app/denis-apps/issue/DEN-29) | selected или изменённый template → Health explanation; empty/error → recovery or Back; retry → recompute. |
+| Outcome | [DEN-25](https://linear.app/denis-apps/issue/DEN-25) | valid или изменённый Goal → Context для подтверждения; missing/invalid/unresolved → controlled stay; Back → Welcome. |
+| Context | [DEN-27](https://linear.app/denis-apps/issue/DEN-27) | valid/changed или осознанно confirmed empty/none Context → Protocols/recompute; missing/invalid/unresolved → controlled stay; Back → Outcome; связь с `not-sure-yet` остаётся TBD. |
+| Recommended protocols | [DEN-29](https://linear.app/denis-apps/issue/DEN-29) | selected или изменённый template → Health explanation; loading/error/empty stays; error → Retry/recompute; empty → только Back → Context. |
 | Health explanation | [DEN-30](https://linear.app/denis-apps/issue/DEN-30) | platform permission result → Status/coverage; manual → explicit manual plan in Status; Back → Protocols. |
 | Status/coverage | [DEN-31](https://linear.app/denis-apps/issue/DEN-31) | fresh coverage для required MetricId/data plan или confirmed manual plan → Setup; refresh/retry stays Status; Back → Health explanation. |
 | Setup | [DEN-28](https://linear.app/denis-apps/issue/DEN-28) | valid single save → Today; validation error/duplicate stays controlled; changed draft primary outcome → contextual permission loop. |
@@ -38,13 +38,23 @@ Manual никогда не перескакивает в Setup: он прихо�
 | Launch Gate | new | Нет product answers, profile или experiment. | Welcome |
 | Launch Gate | resume с достижимым checkpoint | Typed IDs и draft; актуальные данные перечитываются. | Сохранённый шаг |
 | Launch Gate | resume/relaunch с недостижимым checkpoint | Совместимые upstream typed IDs и draft; incompatible downstream очищается, затем recompute/refresh. Setup со stale coverage напрямую не восстанавливается. | Ближайший достижимый upstream шаг |
-| Launch Gate | completed | Завершённый checkpoint; onboarding не проигрывается. | Today |
+| Launch Gate | completed marker и актуальное чтение подтверждает ровно один active experiment | Завершённый checkpoint; onboarding не проигрывается. | Today |
+| Launch Gate | completed marker, 0 active и Setup draft валиден | Валидный draft сохраняется; downstream, несовместимый с актуальным чтением, очищается. | Существующий Setup в recovery mode |
+| Launch Gate | completed marker, 0 active и валидного Setup draft нет | Incompatible downstream очищается, совместимые upstream typed IDs/draft сохраняются, затем recompute/refresh. | Ближайший достижимый upstream шаг |
+| Launch Gate | completed marker и >1 active | Создание experiment блокируется до reconciliation; конкретный storage/repair/reconciliation mechanism остаётся TBD. | Существующий Setup в controlled blocking recovery state |
 | Welcome | 18+ подтверждено | Eligibility confirmation и checkpoint. | Outcome |
 | Welcome | eligibility declined | Нет product answers, profile или experiment. | Safe exit/info |
 | Outcome | Goal выбран или изменён | Goal и независимый Context selection сохраняются; ranking, template, health/status и Setup draft очищаются. | Context для подтверждения |
+| Outcome | missing, invalid или unresolved Goal | Typed UI draft и validation/error сохраняются локально; подтверждённые Goal/Context/checkpoint не подменяются invalid draft, experiment не создаётся. | Outcome (controlled stay) |
 | Context | Context подтверждён или изменён | Goal и Context; ranking/template и всё downstream очищается. | Recommended protocols (recompute) |
+| Context | осознанно подтверждённый empty/none | Подтверждённые Goal/Context/checkpoint; ranking пересчитывается, experiment не создаётся. Связь с `not-sure-yet` остаётся TBD. | Recommended protocols (recompute) |
+| Context | missing, invalid или unresolved Context | Typed UI draft и validation/error сохраняются локально; подтверждённые Goal/Context/checkpoint не подменяются invalid draft, experiment не создаётся. | Context (controlled stay) |
 | Recommended protocols | template выбран или изменён | Выбранный template; старые health/coverage и Setup draft очищаются. | Health explanation |
-| Recommended protocols | empty или error; retry | Нет выведенного template; retry не создаёт experiment и повторно получает ranking. | Recommended protocols или Back |
+| Recommended protocols | ranking loading | Подтверждённые Goal и Context; template/experiment не создаются. | Recommended protocols (loading stay) |
+| Recommended protocols | ranking error | Подтверждённые Goal и Context; transient error, template/experiment не создаются. | Recommended protocols (error stay) |
+| Recommended protocols | Retry | Transient result очищается; ranking пересчитывается только из подтверждённых Goal и Context, template/experiment не создаются. | Recommended protocols (loading stay) |
+| Recommended protocols | ranking empty | Empty result без forward; policy empty остаётся TBD, template/experiment не создаются. | Recommended protocols (empty stay) |
+| Recommended protocols | Back из loading/error/empty | Подтверждённые Goal и Context сохраняются; transient ranking/result очищается, downstream не создаётся. | Context |
 | Health explanation | запрос platform permission | Выбор template и draft; системный запрос не отменяется Back. | Системный permission → Status/coverage |
 | Системный permission | full или partial access | Результат доступа, не вывод о coverage. | Status/coverage |
 | Системный permission | unknown или no permission | Не подменять missing нулём или denied; остаётся путь manual. | Status/coverage |
@@ -58,8 +68,9 @@ Manual никогда не перескакивает в Setup: он прихо�
 | Любой onboarding Screen Spec | Back | Upstream answers/checkpoint; permission не отзывается. | Предыдущий достижимый шаг |
 | Любой незавершённый шаг | relaunch | Checkpoint, typed IDs и draft, не `UiState`; данные перечитываются. | Launch Gate |
 | Setup | validation failure | Draft и ошибки в текущем шаге; experiment не создаётся. | Setup |
-| Setup | valid save | Один active experiment и completed checkpoint. | Today |
-| Setup | duplicate submit | Уже созданный результат не дублируется; точный механизм отложен. | Today или Setup с результатом |
+| Setup | valid save, включая 0-active recovery | Перед save актуально перечитывается cardinality; атомарное создание разрешено только при всё ещё 0 active, постусловие — ровно 1 active experiment и completed checkpoint. | Today |
+| Setup | recovery save видит nonzero cardinality или conflict | Новый experiment не создаётся; конфликт остаётся управляемым до reconciliation. | Setup (controlled stay) |
+| Setup | duplicate submit | Уже созданный результат не дублируется; в recovery cardinality перечитывается перед save, точный механизм отложен. | Today или Setup с результатом |
 | Setup | изменение draft primary outcome меняет требуемые категории | Новый draft primary outcome; устаревший coverage/selection очищается, выданное permission не отзывается. | Health explanation → Status/coverage → Setup |
 
 ## Открытые решения
@@ -67,9 +78,8 @@ Manual никогда не перескакивает в Setup: он прихо�
 Механизмы ниже намеренно не определяются здесь; применимы только перечисленные инварианты и [раздел отложенных решений scope](onboarding-first-run-scope.md#отложенные-решения-и-совместимость).
 
 - формальный Goal/Context → ranking и template → required/optional `MetricId`;
-- схема хранения progress/checkpoint и policy пустой рекомендации;
+- схема хранения progress/checkpoint и точный storage/repair mechanism inconsistent completed checkpoint; policy пустой рекомендации;
 - смысл `not-sure-yet` относительно пустого выбора;
-- completed onboarding без active experiment;
 - шкалы, baseline, длительность и stop rules;
 - поддерживаемые health source, OS и market;
 - legal/privacy retention;
