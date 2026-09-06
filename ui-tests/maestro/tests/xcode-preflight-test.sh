@@ -373,15 +373,22 @@ delete_tree "$NEGATIVE_ARTIFACT_ROOT"
 
 create_case runner-happy-path
 readonly HAPPY_DEVICE_ID=11111111-1111-1111-1111-111111111111
+readonly EXPLICIT_JAVA_HOME="$CASE_DIR/explicit-jdk"
+readonly EXPLICIT_JAVA_LOG="$CASE_DIR/explicit-java.log"
 happy_log="$CASE_DIR/operations.log"
+mkdir -p "$EXPLICIT_JAVA_HOME/bin"
+cp "$TEST_DIR/stubs/java" "$EXPLICIT_JAVA_HOME/bin/java"
+chmod +x "$EXPLICIT_JAVA_HOME/bin/java"
 (
     cd "$CASE_DIR"
     unset DEVELOPER_DIR
+    export JAVA_HOME="$EXPLICIT_JAVA_HOME"
     export PATH="stubs:$PATH"
     export STUB_DEVELOPER_DIR="$DEVELOPER_ROOT"
     export STUB_XCODEBUILD="$XCODEBUILD_BIN"
     export STUB_XCODE_VERSION=26.4
     export STUB_DEVICE_ID="$HAPPY_DEVICE_ID"
+    export STUB_JAVA_LOG="$EXPLICIT_JAVA_LOG"
     export STUB_TERMINATE_EXIT=91
     export STUB_OPERATION_LOG="$happy_log"
     "$RUNNER" ios "$HAPPY_DEVICE_ID" "$HAPPY_RUN_ID"
@@ -389,6 +396,10 @@ happy_log="$CASE_DIR/operations.log"
 
 readonly HAPPY_PLATFORM_ARTIFACTS="$HAPPY_ARTIFACT_ROOT/ios"
 [[ -s "$HAPPY_PLATFORM_ARTIFACTS/command.log" ]] || fail_test "happy runner command log is missing"
+grep -Fx "java_home=$EXPLICIT_JAVA_HOME" "$HAPPY_PLATFORM_ARTIFACTS/command.log" >/dev/null ||
+    fail_test "runner did not preserve the valid explicit JAVA_HOME"
+[[ "$(<"$EXPLICIT_JAVA_LOG")" == "java=$EXPLICIT_JAVA_HOME/bin/java" ]] ||
+    fail_test "runner did not invoke Java from the valid explicit JAVA_HOME"
 grep -Fx 'xcode_version=26.4' "$HAPPY_PLATFORM_ARTIFACTS/command.log" >/dev/null ||
     fail_test "happy runner command log is missing the validated Xcode version"
 [[ -s "$HAPPY_PLATFORM_ARTIFACTS/report.xml" ]] || fail_test "happy runner JUnit report is missing"

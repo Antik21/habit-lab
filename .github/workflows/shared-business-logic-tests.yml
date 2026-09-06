@@ -44,7 +44,12 @@ jobs:
         with:
           persist-credentials: false
       - name: Verify selected Xcode
-        run: xcodebuild -version
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          xcode_version_output="$(xcodebuild -version)"
+          printf '%s\n' "$xcode_version_output"
+          [[ "$(printf '%s\n' "$xcode_version_output" | sed -n '1p')" == 'Xcode 26.4.1' ]]
       - name: Set up JDK 17
         uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
         with:
@@ -58,6 +63,256 @@ jobs:
         run: sdkmanager --channel=3 --install "platforms;android-37.0" "build-tools;36.0.0"
       - name: Run shared checks on the iOS simulator
         run: ./gradlew :shared:check :shared:iosSimulatorArm64Test --stacktrace
+      - name: Install Maestro CLI 2.6.1
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          readonly maestro_archive="$RUNNER_TEMP/maestro-2.6.1.zip"
+          readonly maestro_root="$RUNNER_TEMP/maestro-2.6.1"
+          readonly maestro_bin_dir="$maestro_root/maestro/bin"
+          curl --fail --location --silent --show-error --proto '=https' --tlsv1.2 \
+            --output "$maestro_archive" \
+            https://github.com/mobile-dev-inc/maestro/releases/download/cli-2.6.1/maestro.zip
+          printf '%s  %s\n' \
+            '3440825f514f537c6a96bcf5de995780c2a4a7f83a43208fdc95d4f1fecfad3b' \
+            "$maestro_archive" | shasum -a 256 -c -
+          mkdir -p "$maestro_root"
+          unzip -q "$maestro_archive" -d "$maestro_root"
+          [[ -x "$maestro_bin_dir/maestro" ]]
+          printf '%s\n' "$maestro_bin_dir" >> "$GITHUB_PATH"
+          export PATH="$maestro_bin_dir:$PATH"
+          maestro --version
+          [[ "$(maestro --version)" == '2.6.1' ]]
+      - name: Create job-owned iOS 26.4 simulator
+        id: create-ios-simulator
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          readonly runtime_identifier='com.apple.CoreSimulator.SimRuntime.iOS-26-4'
+          readonly runtime_name='iOS 26.4'
+          readonly runtime_version='26.4.1'
+          readonly device_type_identifier='com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro'
+          readonly device_type_name='iPhone 17 Pro'
+          readonly simulator_name="HabitLab-DEN21-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          if ! runtime_inventory="$(xcrun simctl list runtimes -j)"; then
+            printf 'error: could not read selected Xcode runtime inventory for %s\n' "$runtime_identifier" >&2
+            exit 1
+          fi
+          if ! device_type_inventory="$(xcrun simctl list devicetypes -j)"; then
+            printf 'error: could not read selected Xcode device-type inventory for %s\n' \
+              "$device_type_identifier" >&2
+            exit 1
+          fi
+          readonly runtime_inventory device_type_inventory
+          if ! runtime_entries="$(printf '%s\n' "$runtime_inventory" | jq -c --arg identifier "$runtime_identifier" '
+              [.runtimes[] | select(.identifier == $identifier) | {
+                identifier,
+                name,
+                version,
+                buildversion,
+                isAvailable,
+                availability
+              }]
+            ')"; then
+            printf 'error: could not inspect runtime %s; required device type is %s\n' \
+              "$runtime_identifier" "$device_type_identifier" >&2
+            exit 1
+          fi
+          if ! runtime_match_count="$(printf '%s\n' "$runtime_inventory" | jq -r \
+              --arg identifier "$runtime_identifier" \
+              --arg name "$runtime_name" \
+              --arg version "$runtime_version" '
+                [.runtimes[] | select(
+                  .identifier == $identifier and
+                  .name == $name and
+                  .version == $version and
+                  .isAvailable == true
+                )] | length
+              ')"; then
+            printf 'error: could not resolve runtime %s; required device type is %s\n' \
+              "$runtime_identifier" "$device_type_identifier" >&2
+            exit 1
+          fi
+          if [[ "$runtime_match_count" != 1 ]]; then
+            printf 'error: selected Xcode must provide one available %s %s runtime (%s); required device type is %s; matching entries: %s\n' \
+              "$runtime_name" "$runtime_version" "$runtime_identifier" "$device_type_identifier" "$runtime_match_count" >&2
+            printf 'runtime entries for %s: %s\n' "$runtime_identifier" "$runtime_entries" >&2
+            exit 1
+          fi
+          if ! device_type_entries="$(printf '%s\n' "$device_type_inventory" | jq -c --arg identifier "$device_type_identifier" '
+              [.devicetypes[] | select(.identifier == $identifier) | {identifier, name}]
+            ')"; then
+            printf 'error: could not inspect device type %s\n' "$device_type_identifier" >&2
+            exit 1
+          fi
+          if ! device_type_match_count="$(printf '%s\n' "$device_type_inventory" | jq -r \
+              --arg identifier "$device_type_identifier" \
+              --arg name "$device_type_name" '
+                [.devicetypes[] | select(.identifier == $identifier and .name == $name)] | length
+              ')"; then
+            printf 'error: could not resolve device type %s\n' "$device_type_identifier" >&2
+            exit 1
+          fi
+          if [[ "$device_type_match_count" != 1 ]]; then
+            printf 'error: selected Xcode must provide one %s device type; matching entries: %s\n' \
+              "$device_type_name" "$device_type_match_count" >&2
+            printf 'device-type entries for %s: %s\n' "$device_type_identifier" "$device_type_entries" >&2
+            exit 1
+          fi
+          readonly preexisting_named_simulator_uuids="$(xcrun simctl list devices -j | jq -r --arg name "$simulator_name" '
+            [.devices[]?[]? | select(.name == $name) | .udid] | .[]
+          ')"
+          if ! create_output_file="$(mktemp "$RUNNER_TEMP/habit-lab-den21-simctl-create-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.XXXXXX")"; then
+            printf '%s\n' 'error: could not create the temporary simctl output file' >&2
+            exit 1
+          fi
+          readonly create_output_file
+          created_udid=''
+          is_uuid() {
+            local candidate="${1:-}"
+            [[ "$candidate" =~ ^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$ ]]
+          }
+          was_preexisting_named_simulator_udid() {
+            local candidate="$1"
+            local preexisting_udid=''
+            while IFS= read -r preexisting_udid; do
+              [[ -n "$preexisting_udid" && "$candidate" == "$preexisting_udid" ]] && return 0
+            done <<< "$preexisting_named_simulator_uuids"
+            return 1
+          }
+          read_created_udid() {
+            local candidate=''
+            [[ -r "$create_output_file" ]] || return 1
+            candidate="$(tr -d '\r\n' < "$create_output_file")"
+            is_uuid "$candidate" || return 1
+            printf '%s\n' "$candidate"
+          }
+          find_unique_new_named_simulator_udid() {
+            local current_named_simulator_uuids=''
+            local candidate=''
+            local selected_udid=''
+            local new_count=0
+            current_named_simulator_uuids="$(xcrun simctl list devices -j 2>/dev/null | jq -r --arg name "$simulator_name" '
+              [.devices[]?[]? | select(.name == $name) | .udid] | .[]
+            ' 2>/dev/null)" || return 1
+            while IFS= read -r candidate; do
+              [[ -n "$candidate" ]] || continue
+              is_uuid "$candidate" || return 1
+              if ! was_preexisting_named_simulator_udid "$candidate"; then
+                selected_udid="$candidate"
+                (( new_count += 1 ))
+              fi
+            done <<< "$current_named_simulator_uuids"
+            (( new_count == 1 )) || return 1
+            printf '%s\n' "$selected_udid"
+          }
+          cleanup_created_simulator() {
+            local exit_status="$1"
+            local cleanup_udid=''
+            trap - EXIT ERR HUP INT TERM
+            if is_uuid "$created_udid" && ! was_preexisting_named_simulator_udid "$created_udid"; then
+              cleanup_udid="$created_udid"
+            else
+              cleanup_udid="$(read_created_udid 2>/dev/null || true)"
+              if ! is_uuid "$cleanup_udid" || was_preexisting_named_simulator_udid "$cleanup_udid"; then
+                cleanup_udid="$(find_unique_new_named_simulator_udid || true)"
+              fi
+            fi
+            if is_uuid "$cleanup_udid"; then
+              xcrun simctl shutdown "$cleanup_udid" >/dev/null 2>&1 || true
+              xcrun simctl delete "$cleanup_udid" >/dev/null 2>&1 || true
+            fi
+            exit "$exit_status"
+          }
+          cleanup_on_exit() {
+            local exit_status=$?
+            cleanup_created_simulator "$exit_status"
+          }
+          cleanup_on_error() {
+            local exit_status=$?
+            cleanup_created_simulator "$exit_status"
+          }
+          cleanup_on_hup() {
+            cleanup_created_simulator 129
+          }
+          cleanup_on_int() {
+            cleanup_created_simulator 130
+          }
+          cleanup_on_term() {
+            cleanup_created_simulator 143
+          }
+          trap cleanup_on_exit EXIT
+          trap cleanup_on_error ERR
+          trap cleanup_on_hup HUP
+          trap cleanup_on_int INT
+          trap cleanup_on_term TERM
+          xcrun simctl create "$simulator_name" "$device_type_identifier" "$runtime_identifier" > "$create_output_file"
+          created_udid="$(read_created_udid)"
+          is_uuid "$created_udid"
+          printf 'name=%s\nudid=%s\n' "$simulator_name" "$created_udid" >> "$GITHUB_OUTPUT"
+          trap - EXIT ERR HUP INT TERM
+      - name: Run Maestro parity smoke on the job-owned iOS simulator
+        shell: bash
+        env:
+          MAESTRO_IOS_UDID: ${{ steps.create-ios-simulator.outputs.udid }}
+        run: ./ui-tests/maestro/run.sh ios "$MAESTRO_IOS_UDID" ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}
+      - name: Verify iOS Maestro canonical evidence
+        if: always()
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          readonly artifact_dir="build/maestro/ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}/ios"
+          missing=0
+          require_non_empty() {
+            local artifact_path="$1"
+            if [[ ! -s "$artifact_path" ]]; then
+              printf 'error: expected non-empty Maestro artifact: %s\n' "$artifact_path" >&2
+              missing=1
+            fi
+          }
+          require_non_empty "$artifact_dir/command.log"
+          require_non_empty "$artifact_dir/report.xml"
+          require_non_empty "$artifact_dir/debug/maestro.log"
+          require_non_empty "$artifact_dir/debug/commands-(reference-screens).json"
+          screenshot_count=0
+          if [[ -d "$artifact_dir/screenshots" ]]; then
+            screenshot_count="$(find "$artifact_dir/screenshots" -type f -name '*.png' -print | wc -l | tr -d '[:space:]')"
+          fi
+          if ! [[ "$screenshot_count" =~ ^[0-9]+$ ]] || (( screenshot_count < 3 )); then
+            printf 'error: expected at least 3 Maestro screenshots under %s/screenshots; found %s\n' \
+              "$artifact_dir" "$screenshot_count" >&2
+            missing=1
+          fi
+          (( missing == 0 ))
+      - name: Upload iOS Maestro evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: maestro-ios-ci-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          path: |
+            build/maestro/ci-${{ github.run_id }}-${{ github.run_attempt }}/ios/command.log
+            build/maestro/ci-${{ github.run_id }}-${{ github.run_attempt }}/ios/report.xml
+            build/maestro/ci-${{ github.run_id }}-${{ github.run_attempt }}/ios/screenshots/**
+            build/maestro/ci-${{ github.run_id }}-${{ github.run_attempt }}/ios/debug/**
+            !build/maestro/ci-${{ github.run_id }}-${{ github.run_attempt }}/ios/DerivedData/**
+      - name: Clean up job-owned iOS simulator
+        if: always()
+        shell: bash
+        env:
+          CREATED_IOS_SIMULATOR_NAME: ${{ steps.create-ios-simulator.outputs.name }}
+          CREATED_IOS_SIMULATOR_UDID: ${{ steps.create-ios-simulator.outputs.udid }}
+        run: |
+          set -Eeuo pipefail
+          if [[ -z "$CREATED_IOS_SIMULATOR_UDID" ]]; then
+            printf '%s\n' 'No job-owned iOS simulator was created.'
+            exit 0
+          fi
+          [[ "$CREATED_IOS_SIMULATOR_UDID" =~ ^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$ ]]
+          [[ -n "$CREATED_IOS_SIMULATOR_NAME" ]]
+          xcrun simctl list devices | grep -F "$CREATED_IOS_SIMULATOR_NAME ($CREATED_IOS_SIMULATOR_UDID)" >/dev/null
+          xcrun simctl shutdown "$CREATED_IOS_SIMULATOR_UDID" || true
+          xcrun simctl delete "$CREATED_IOS_SIMULATOR_UDID"
 
   android-emulator:
     name: Android emulator common tests
@@ -83,6 +338,26 @@ jobs:
         uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
       - name: Install the Android compile SDK
         run: sdkmanager --channel=3 --install "platforms;android-37.0" "build-tools;36.0.0"
+      - name: Install Maestro CLI 2.6.1
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          readonly maestro_archive="$RUNNER_TEMP/maestro-2.6.1.zip"
+          readonly maestro_root="$RUNNER_TEMP/maestro-2.6.1"
+          readonly maestro_bin_dir="$maestro_root/maestro/bin"
+          curl --fail --location --silent --show-error --proto '=https' --tlsv1.2 \
+            --output "$maestro_archive" \
+            https://github.com/mobile-dev-inc/maestro/releases/download/cli-2.6.1/maestro.zip
+          printf '%s  %s\n' \
+            '3440825f514f537c6a96bcf5de995780c2a4a7f83a43208fdc95d4f1fecfad3b' \
+            "$maestro_archive" | shasum -a 256 -c -
+          mkdir -p "$maestro_root"
+          unzip -q "$maestro_archive" -d "$maestro_root"
+          [[ -x "$maestro_bin_dir/maestro" ]]
+          printf '%s\n' "$maestro_bin_dir" >> "$GITHUB_PATH"
+          export PATH="$maestro_bin_dir:$PATH"
+          maestro --version
+          [[ "$(maestro --version)" == '2.6.1' ]]
       - name: Enable KVM group permissions
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -94,4 +369,45 @@ jobs:
           api-level: 36
           target: google_apis
           arch: x86_64
-          script: ./gradlew :shared:connectedAndroidDeviceTest --stacktrace
+          script: |
+            ./gradlew :shared:connectedAndroidDeviceTest --stacktrace
+            ./ui-tests/maestro/run.sh android emulator-5554 ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}
+      - name: Verify Android Maestro canonical evidence
+        if: always()
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          readonly artifact_dir="build/maestro/ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}/android"
+          missing=0
+          require_non_empty() {
+            local artifact_path="$1"
+            if [[ ! -s "$artifact_path" ]]; then
+              printf 'error: expected non-empty Maestro artifact: %s\n' "$artifact_path" >&2
+              missing=1
+            fi
+          }
+          require_non_empty "$artifact_dir/command.log"
+          require_non_empty "$artifact_dir/report.xml"
+          require_non_empty "$artifact_dir/debug/maestro.log"
+          require_non_empty "$artifact_dir/debug/commands-(reference-screens).json"
+          screenshot_count=0
+          if [[ -d "$artifact_dir/screenshots" ]]; then
+            screenshot_count="$(find "$artifact_dir/screenshots" -type f -name '*.png' -print | wc -l | tr -d '[:space:]')"
+          fi
+          if ! [[ "$screenshot_count" =~ ^[0-9]+$ ]] || (( screenshot_count < 3 )); then
+            printf 'error: expected at least 3 Maestro screenshots under %s/screenshots; found %s\n' \
+              "$artifact_dir" "$screenshot_count" >&2
+            missing=1
+          fi
+          (( missing == 0 ))
+      - name: Upload Android Maestro evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: maestro-android-ci-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          path: |
+            build/maestro/ci-${{ github.run_id }}-${{ github.run_attempt }}/android/command.log
+            build/maestro/ci-${{ github.run_id }}-${{ github.run_attempt }}/android/report.xml
+            build/maestro/ci-${{ github.run_id }}-${{ github.run_attempt }}/android/screenshots/**
+            build/maestro/ci-${{ github.run_id }}-${{ github.run_attempt }}/android/debug/**

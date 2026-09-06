@@ -45,7 +45,9 @@ else
         fail "iOS device-id must be an explicit simulator UDID"
 fi
 
-if [[ -x /usr/libexec/java_home ]]; then
+if [[ -n "${JAVA_HOME:-}" && -x "$JAVA_HOME/bin/java" ]]; then
+    export PATH="$JAVA_HOME/bin:$PATH"
+elif [[ -x /usr/libexec/java_home ]]; then
     jbr_21_home="$(/usr/libexec/java_home -v 21 2>/dev/null || true)"
     if [[ -n "$jbr_21_home" && -x "$jbr_21_home/bin/java" ]]; then
         export JAVA_HOME="$jbr_21_home"
