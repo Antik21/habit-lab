@@ -83,7 +83,7 @@ Manual идёт в Status/coverage с явным data plan, не в Setup. Permi
 
 ## Открытые решения
 
-Открыты только implementation details; действуют [инварианты scope](onboarding-first-run-scope.md#отложенные-решения-и-совместимость).
+Ниже — отложенные product/policy/implementation решения; действуют [scope-инварианты](onboarding-first-run-scope.md#отложенные-решения-и-совместимость).
 
 - формальный Goal/Context → ranking и template → required/optional `MetricId`;
 - схема хранения progress/checkpoint и точный storage/repair mechanism inconsistent completed checkpoint; policy пустой рекомендации;
