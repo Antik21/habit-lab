@@ -11,11 +11,9 @@
 
 Канонический путь: **Launch Gate** (невидимое решение) → **Welcome** → **Outcome** → **Context** → **Recommended protocols** → **Health explanation** → platform permission **или** manual → **Status/coverage** → **Setup** → **Today**.
 
-Launch Gate — [DEN-33](https://linear.app/denis-apps/issue/DEN-33) implementation: новый → Welcome, completed → Today только при 1 matching active — ACTIVE result из exact persisted Setup draft revision текущей onboarding attempt. Inconsistent checkpoint: [DEN-28](https://linear.app/denis-apps/issue/DEN-28) Setup восстанавливает 0 active с валидным draft; 1 nonmatching active или >1 active блокируют новый create до reconciliation, иначе — ближайший upstream. Today после Setup — [DEN-41](https://linear.app/denis-apps/issue/DEN-41).
+Launch Gate — [DEN-33](https://linear.app/denis-apps/issue/DEN-33) implementation: completed → Today только когда overall active cardinality=1 и sole ACTIVE result matches exact persisted Setup-draft revision текущей onboarding attempt. Inconsistent checkpoint: [DEN-28](https://linear.app/denis-apps/issue/DEN-28) Setup: 0 active + валидный draft; 1 nonmatching или >1 active блокируют create до reconciliation, иначе — upstream. Today — [DEN-41](https://linear.app/denis-apps/issue/DEN-41).
 
 Welcome требует явного 18+ confirmation до product answers. Fresh confirmation локальна до CTA; CTA сохраняет eligibility/checkpoint. Decline/revoke в confirmed re-entry атомарно очищает eligibility и downstream checkpoint/answers/draft, затем открывает terminal Welcome; Profile/Experiment ещё нет. Checkpoint хранит step, typed IDs и draft, не `UiState`; relaunch идёт через Launch Gate с перечитыванием и проверкой достижимости.
-
-Permission/provider/coverage независимы: missing не zero, iOS empty read не denied.
 
 ## Реестр Screen Spec
 
@@ -38,7 +36,7 @@ Permission/provider/coverage независимы: missing не zero, iOS empty 
 | Launch Gate | new | Нет product answers, profile или experiment. | Welcome |
 | Launch Gate | resume с достижимым checkpoint | Typed IDs и draft; актуальные данные перечитываются. | Сохранённый шаг |
 | Launch Gate | resume/relaunch с недостижимым checkpoint | Совместимые upstream typed IDs и draft; incompatible downstream очищается, затем recompute/refresh. Setup со stale coverage напрямую не восстанавливается. | Ближайший достижимый upstream шаг |
-| Launch Gate | completed marker + актуальное чтение: 1 matching active | Завершённый checkpoint; onboarding не проигрывается. | Today |
+| Launch Gate | completed marker + актуальное чтение: overall active cardinality=1 и sole ACTIVE result matches exact persisted Setup-draft revision текущей onboarding attempt | Завершённый checkpoint; onboarding не проигрывается. | Today |
 | Launch Gate | completed marker, 0 active и Setup draft валиден | Валидный draft сохраняется; downstream, несовместимый с актуальным чтением, очищается. | Существующий Setup в recovery mode |
 | Launch Gate | completed marker, 0 active и валидного Setup draft нет | Incompatible downstream очищается, совместимые upstream typed IDs/draft сохраняются, затем recompute/refresh. | Ближайший достижимый upstream шаг |
 | Launch Gate | completed marker и 1 nonmatching active или >1 active | Создание experiment блокируется до reconciliation; repair mechanism TBD. | Существующий Setup в controlled blocking recovery state |
@@ -77,7 +75,7 @@ Permission/provider/coverage независимы: missing не zero, iOS empty 
 | Любой незавершённый шаг, включая Welcome | relaunch | Checkpoint, typed IDs и draft, не `UiState`; данные перечитываются. | Launch Gate |
 | Setup | validation failure | Draft и ошибки в текущем шаге; experiment не создаётся. | Setup |
 | Setup | valid save, включая 0-active recovery | Перед save актуально перечитывается cardinality; атомарное создание разрешено только при всё ещё 0 active, постусловие — ровно 1 active experiment и completed checkpoint. | Today |
-| Setup | recovery/duplicate видит 1 matching active | already created exact persisted-draft result не дублируется; новый create не запускается. | Today |
+| Setup | recovery/duplicate: overall active cardinality=1, sole ACTIVE result matches exact persisted-draft revision текущей onboarding attempt | already created exact persisted-draft result не дублируется; новый create не запускается. | Today |
 | Setup | recovery видит 1 nonmatching active или >1 active | Новый experiment не создаётся; controlled blocking до reconciliation. | Setup (controlled stay) |
 | Setup | изменение draft primary outcome или collection mode меняет covered data needs | Новый draft; affected stale app-owned plan/coverage/selection и confirmed manual plan очищаются; OS permission не отзывается; Status строит manual plan заново; нужна fresh explicit confirmation. | Health explanation → Status/coverage → Setup |
 
