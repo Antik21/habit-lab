@@ -17,6 +17,10 @@ internal actual class FileBackedRoomDatabaseFixture actual constructor() {
         ),
     )
 
+    actual fun createV1DatabaseWithLegacyRows() {
+        createV1DatabaseWithLegacyRows(databaseFile.absolutePath)
+    }
+
     actual fun delete() {
         databaseFile.deleteWithSidecars()
     }

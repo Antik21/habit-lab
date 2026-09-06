@@ -14,6 +14,10 @@ internal actual class FileBackedRoomDatabaseFixture actual constructor() {
         Room.databaseBuilder<HabitLabDatabase>(name = databasePath),
     )
 
+    actual fun createV1DatabaseWithLegacyRows() {
+        createV1DatabaseWithLegacyRows(databasePath)
+    }
+
     actual fun delete() {
         val fileManager = NSFileManager.defaultManager
         listOf("", "-shm", "-wal", ".lck").forEach { suffix ->

@@ -7,13 +7,17 @@ import com.denis.habitlab.shared.data.local.DebugDatabaseBootstrap
 import com.denis.habitlab.shared.data.local.DebugExperimentDatabaseControl
 import com.denis.habitlab.shared.data.local.HabitLabDatabase
 import com.denis.habitlab.shared.data.local.RoomExperimentLocalDataSource
+import com.denis.habitlab.shared.data.local.RoomOnboardingLocalDataSource
 import com.denis.habitlab.shared.data.observer.RoomExperimentObservers
+import com.denis.habitlab.shared.data.observer.RoomOnboardingObservers
 import com.denis.habitlab.shared.data.repository.AppMetadataRepositoryImpl
 import com.denis.habitlab.shared.data.repository.RuntimeAppPreferenceRepository
 import com.denis.habitlab.shared.data.repository.RecordedAtCurrentLocalDateSource
 import com.denis.habitlab.shared.data.repository.PlatformAppMetadataDataSource
 import com.denis.habitlab.shared.data.repository.RandomDraftExperimentIdSource
 import com.denis.habitlab.shared.data.repository.RoomExperimentRepository
+import com.denis.habitlab.shared.data.repository.RoomOnboardingRepository
+import com.denis.habitlab.shared.data.repository.RandomOnboardingProtocolIdSource
 import com.denis.habitlab.shared.data.repository.SystemRecordedAtSource
 import com.denis.habitlab.shared.domain.interactor.RecordedAtSource
 import com.denis.habitlab.shared.domain.interactor.CreateExperimentDraft
@@ -23,15 +27,29 @@ import com.denis.habitlab.shared.domain.interactor.GetAppMetadata
 import com.denis.habitlab.shared.domain.interactor.RecordDailyCheckIn
 import com.denis.habitlab.shared.domain.interactor.DeleteExperiment
 import com.denis.habitlab.shared.domain.interactor.CurrentLocalDateSource
+import com.denis.habitlab.shared.domain.interactor.ConfirmOnboardingEligibility
+import com.denis.habitlab.shared.domain.interactor.RevokeOnboardingEligibility
+import com.denis.habitlab.shared.domain.interactor.ConfirmOnboardingGoal
+import com.denis.habitlab.shared.domain.interactor.ConfirmOnboardingContexts
+import com.denis.habitlab.shared.domain.interactor.SelectOnboardingProtocol
+import com.denis.habitlab.shared.domain.interactor.SaveOnboardingHealthState
+import com.denis.habitlab.shared.domain.interactor.SaveOnboardingSetupDraftReference
+import com.denis.habitlab.shared.domain.interactor.CreateInitialActiveOnboardingProtocol
+import com.denis.habitlab.shared.domain.interactor.AppendOnboardingProtocolConfiguration
+import com.denis.habitlab.shared.domain.interactor.OnboardingProtocolIdSource
 import com.denis.habitlab.shared.domain.interactor.GetCurrentLocalDate
 import com.denis.habitlab.shared.domain.interactor.ObserveThemePreference
 import com.denis.habitlab.shared.domain.interactor.SetThemePreference
 import com.denis.habitlab.shared.domain.observer.DailyCheckInObserver
 import com.denis.habitlab.shared.domain.observer.ExperimentListObserver
 import com.denis.habitlab.shared.domain.observer.ExperimentProjectionObserver
+import com.denis.habitlab.shared.domain.observer.OnboardingStateObserver
+import com.denis.habitlab.shared.domain.observer.OnboardingCatalogObserver
+import com.denis.habitlab.shared.domain.observer.ActiveOnboardingProtocolObserver
 import com.denis.habitlab.shared.domain.repository.AppMetadataRepository
 import com.denis.habitlab.shared.domain.repository.ExperimentRepository
 import com.denis.habitlab.shared.domain.repository.AppPreferenceRepository
+import com.denis.habitlab.shared.domain.repository.OnboardingRepository
 import com.denis.habitlab.shared.presentation.AppPresenter
 import com.denis.habitlab.shared.presentation.gallery.ComponentGalleryUiMapper
 import com.denis.habitlab.shared.presentation.gallery.ComponentGalleryViewModel
@@ -136,18 +154,34 @@ private fun habitLabModule(
         )
     }
     single { RoomExperimentLocalDataSource(database = get()) }
+    single { RoomOnboardingLocalDataSource(database = get()) }
     single<ExperimentRepository> { RoomExperimentRepository(localDataSource = get()) }
+    single<OnboardingRepository> { RoomOnboardingRepository(localDataSource = get()) }
     single { RoomExperimentObservers(localDataSource = get(), databaseReadiness = get()) }
     single<ExperimentProjectionObserver> { get<RoomExperimentObservers>() }
     single<ExperimentListObserver> { get<RoomExperimentObservers>() }
     single<DailyCheckInObserver> { get<RoomExperimentObservers>() }
+    single { RoomOnboardingObservers(localDataSource = get()) }
+    single<OnboardingStateObserver> { get<RoomOnboardingObservers>() }
+    single<OnboardingCatalogObserver> { get<RoomOnboardingObservers>() }
+    single<ActiveOnboardingProtocolObserver> { get<RoomOnboardingObservers>() }
     single<ExperimentIdSource> { RandomDraftExperimentIdSource() }
+    single<OnboardingProtocolIdSource> { RandomOnboardingProtocolIdSource() }
     single<RecordedAtSource> { SystemRecordedAtSource() }
     single<CurrentLocalDateSource> { RecordedAtCurrentLocalDateSource(recordedAtSource = get()) }
     single { CreateExperimentDraft(repository = get(), idSource = get(), recordedAtSource = get()) }
     single { EditExperimentDraft(repository = get(), recordedAtSource = get()) }
     single { RecordDailyCheckIn(repository = get(), recordedAtSource = get()) }
     single { DeleteExperiment(repository = get()) }
+    single { ConfirmOnboardingEligibility(repository = get()) }
+    single { RevokeOnboardingEligibility(repository = get()) }
+    single { ConfirmOnboardingGoal(repository = get()) }
+    single { ConfirmOnboardingContexts(repository = get()) }
+    single { SelectOnboardingProtocol(repository = get()) }
+    single { SaveOnboardingHealthState(repository = get()) }
+    single { SaveOnboardingSetupDraftReference(repository = get()) }
+    single { CreateInitialActiveOnboardingProtocol(repository = get(), idSource = get()) }
+    single { AppendOnboardingProtocolConfiguration(repository = get()) }
     single { GetCurrentLocalDate(source = get()) }
     single<AppPreferenceRepository> { RuntimeAppPreferenceRepository() }
     single { ObserveThemePreference(repository = get()) }

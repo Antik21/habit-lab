@@ -8,13 +8,22 @@ import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import kotlinx.coroutines.CoroutineDispatcher
 
 @Database(
-    entities = [ExperimentEntity::class, CheckInEntity::class],
-    version = 1,
+    entities = [
+        ExperimentEntity::class,
+        CheckInEntity::class,
+        OnboardingCatalogEntryEntity::class,
+        OnboardingStateEntity::class,
+        OnboardingProtocolEntity::class,
+        OnboardingProtocolConfigurationEntity::class,
+    ],
+    version = 2,
     exportSchema = true,
 )
 @ConstructedBy(HabitLabDatabaseConstructor::class)
 abstract class HabitLabDatabase : RoomDatabase() {
     internal abstract fun experimentDao(): ExperimentDao
+
+    internal abstract fun onboardingDao(): OnboardingDao
 }
 
 @Suppress("KotlinNoActualForExpect")
@@ -31,4 +40,6 @@ internal fun buildHabitLabDatabase(
 ): HabitLabDatabase = builder
     .setDriver(BundledSQLiteDriver())
     .setQueryCoroutineContext(roomQueryDispatcher)
+    .addMigrations(ONBOARDING_MIGRATION_1_2)
+    .addCallback(OnboardingCatalogSeedCallback())
     .build()
