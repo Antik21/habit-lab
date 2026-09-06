@@ -11,21 +11,21 @@
 
 Канонический путь: **Launch Gate** (невидимое решение) → **Welcome** → **Outcome** → **Context** → **Recommended protocols** → **Health explanation** → platform permission **или** manual → **Status/coverage** → **Setup** → **Today**.
 
-Launch Gate — [DEN-33](https://linear.app/denis-apps/issue/DEN-33) implementation, не Screen Spec. Новый пользователь → Welcome; возобновляемый draft → checkpoint; completed marker → Today только после актуального подтверждения ровно одного active experiment. При inconsistent completed checkpoint существующий [DEN-28](https://linear.app/denis-apps/issue/DEN-28) Setup восстанавливает 0 active с валидным draft, блокирует >1 active, иначе откатывает к ближайшему достижимому upstream. Setup recovery не отдельный destination. Today после Setup принадлежит [DEN-41](https://linear.app/denis-apps/issue/DEN-41), не onboarding Screen Spec.
+Launch Gate — [DEN-33](https://linear.app/denis-apps/issue/DEN-33) implementation, не Screen Spec: новый → Welcome, resume draft → checkpoint, completed → Today только после подтверждения ровно одного active experiment. Inconsistent completed checkpoint: [DEN-28](https://linear.app/denis-apps/issue/DEN-28) Setup восстанавливает 0 active с валидным draft, блокирует >1, иначе откатывает к ближайшему upstream. Setup recovery не destination; Today после Setup — [DEN-41](https://linear.app/denis-apps/issue/DEN-41).
 
-Welcome требует явного 18+ confirmation до product answers. Fresh confirmation локальна до CTA; CTA сохраняет eligibility и checkpoint. Decline/revoke в confirmed re-entry атомарно очищает eligibility и downstream checkpoint/answers/draft, затем открывает terminal state Welcome; Profile/Experiment ещё нет. Checkpoint хранит шаг, typed IDs и draft, не `UiState`; relaunch входит через Launch Gate с перечитыванием и проверкой достижимости.
+Welcome требует явного 18+ confirmation до product answers. Fresh confirmation локальна до CTA; CTA сохраняет eligibility/checkpoint. Decline/revoke в confirmed re-entry атомарно очищает eligibility и downstream checkpoint/answers/draft, затем открывает terminal Welcome; Profile/Experiment ещё нет. Checkpoint хранит step, typed IDs и draft, не `UiState`; relaunch идёт через Launch Gate с перечитыванием и проверкой достижимости.
 
-Manual никогда не перескакивает в Setup: он приходит в Status/coverage как явный manual data plan и лишь затем может продолжить. Permission, наличие провайдера и coverage — независимые факты: missing не равно zero, пустое чтение iOS не равно denied. Назад идёт по цепочке и не отзывает уже выданное системное permission.
+Manual идёт в Status/coverage с явным data plan, не в Setup. Permission, provider и coverage независимы: missing не zero, iOS empty read не denied. Back не отзывает system permission.
 
 ## Реестр Screen Spec
 
-Реестр ссылается на attached Linear documents по мере их создания; issue URLs остаются временными только для ещё не созданных specs. Каждый attached document добавляет backlink на этот User Flow.
+Реестр ссылается на attached Linear documents; issue URL временный только для ещё не созданного spec. Каждый document добавляет backlink на этот Flow.
 
 | Screen Spec | Owner / document | Обязательные outgoing transitions |
 | --- | --- | --- |
 | Welcome | [DEN-26](https://linear.app/denis-apps/document/onboarding-0320-screen-spec-welcome-2698906cbdb6) | confirmed → Outcome; declined → terminal safe exit/info внутри Welcome; root Back → host exit; relaunch → Launch Gate. |
 | Outcome | [DEN-25](https://linear.app/denis-apps/document/onboarding-0420-screen-spec-vybor-osnovnogo-rezultata-01a8c5eb01b3) | valid или изменённый Goal → Context для подтверждения; missing/invalid/unresolved → controlled stay; Back → Welcome. |
-| Context | [DEN-27](https://linear.app/denis-apps/issue/DEN-27) | valid/changed или осознанно confirmed empty/none Context → Protocols/recompute; missing/invalid/unresolved → controlled stay; Back → Outcome; связь с `not-sure-yet` остаётся TBD. |
+| Context | [DEN-27](https://linear.app/denis-apps/document/onboarding-0520-screen-spec-kontekst-i-tekushie-privychki-16f4aaa9af09) | confirmed non-empty Context, включая только `not-sure-yet`, либо confirmed empty → Protocols/recompute; missing/invalid/unresolved → controlled stay; Back → Outcome. |
 | Recommended protocols | [DEN-29](https://linear.app/denis-apps/issue/DEN-29) | selected или изменённый template → Health explanation; loading/error/empty stays; error → Retry/recompute; empty → только Back → Context. |
 | Health explanation | [DEN-30](https://linear.app/denis-apps/issue/DEN-30) | platform permission result → Status/coverage; manual → explicit manual plan in Status; Back → Protocols. |
 | Status/coverage | [DEN-31](https://linear.app/denis-apps/issue/DEN-31) | fresh coverage для required MetricId/data plan или confirmed manual plan → Setup; refresh/retry stays Status; Back → Health explanation. |
@@ -52,9 +52,11 @@ Manual никогда не перескакивает в Setup: он прихо�
 | Outcome | Первый Goal или persisted Goal изменён | Атомарно сохранить Goal, eligibility и независимый Context; очистить ranking/result, template, app-owned health/data plan/status/coverage и Setup draft; checkpoint → Context. | Context для подтверждения |
 | Outcome | CTA: тот же persisted Goal | Goal/downstream — data no-op; checkpoint Context записать атомарно до navigation. Failure сохраняет Outcome checkpoint; controlled stay. Context подтвердить до recompute. | Context |
 | Outcome | missing, invalid или unresolved Goal | Typed UI draft и validation/error сохраняются локально; подтверждённые Goal/Context/checkpoint не подменяются invalid draft, experiment не создаётся. | Outcome (controlled stay) |
-| Context | Context подтверждён или изменён | Goal и Context; ranking/template и всё downstream очищается. | Recommended protocols (recompute) |
-| Context | осознанно подтверждённый empty/none | Подтверждённые Goal/Context/checkpoint; ranking пересчитывается, experiment не создаётся. Связь с `not-sure-yet` остаётся TBD. | Recommended protocols (recompute) |
-| Context | missing, invalid или unresolved Context | Typed UI draft и validation/error сохраняются локально; подтверждённые Goal/Context/checkpoint не подменяются invalid draft, experiment не создаётся. | Context (controlled stay) |
+| Context | Confirmed non-empty set: specific IDs либо только `not-sure-yet` | Атомарно сохранить Goal + Context; очистить ranking/result, template, app-owned health/data plan/status/coverage, Setup draft; checkpoint → Protocols; nav/recompute после commit. | Recommended protocols (recompute) |
+| Context | Явно confirmed empty set через «Ничего из этого» | Та же полная атомарная invalidation с empty `Set<ContextId>`; empty не `ContextId`/`not-sure-yet`. | Recommended protocols (recompute) |
+| Context | local unanswered, missing, invalid или unresolved | Typed draft и validation/error локальны; confirmed Goal/Context/checkpoint не подменяются, experiment не создаётся. | Context (controlled stay) |
+| Context | persistence failure | Last persisted state + local draft; нет partial invalidation, nav или experiment. | Context (controlled stay) |
+| Context | Back / system Back | Сохранить persisted eligibility/Goal/Context/downstream; отбросить только local Context draft. | Outcome |
 | Recommended protocols | template выбран или изменён | Выбранный template; старые health/coverage и Setup draft очищаются. | Health explanation |
 | Recommended protocols | ranking loading | Подтверждённые Goal и Context; template/experiment не создаются. | Recommended protocols (loading stay) |
 | Recommended protocols | ranking error | Подтверждённые Goal и Context; transient error, template/experiment не создаются. | Recommended protocols (error stay) |
@@ -81,11 +83,10 @@ Manual никогда не перескакивает в Setup: он прихо�
 
 ## Открытые решения
 
-Механизмы ниже намеренно не определяются здесь; применимы только перечисленные инварианты и [раздел отложенных решений scope](onboarding-first-run-scope.md#отложенные-решения-и-совместимость).
+Открыты только implementation details; действуют [инварианты scope](onboarding-first-run-scope.md#отложенные-решения-и-совместимость).
 
 - формальный Goal/Context → ranking и template → required/optional `MetricId`;
 - схема хранения progress/checkpoint и точный storage/repair mechanism inconsistent completed checkpoint; policy пустой рекомендации;
-- смысл `not-sure-yet` относительно пустого выбора;
 - шкалы, baseline, длительность и stop rules;
 - поддерживаемые health source, OS и market;
 - legal/privacy retention;
