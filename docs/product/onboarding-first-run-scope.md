@@ -9,7 +9,7 @@
 
 ## Продуктовый scope v1
 
-Продукт для взрослых 18+, исследующих собственный сон и утреннюю энергию. Владельцы часов — cohort первичной проверки, а не критерий допуска: ручной режим даёт тот же продукт без часов и health-permissions. Это wellness-инструмент, не диагностика, лечение, назначение лекарств, клиническое обещание или источник универсальных норм.
+Продукт для взрослых 18+, исследующих собственный сон и утреннюю энергию. Возраст 18+ — обязательный eligibility gate v1, одинаковый на Android и iOS. До product answers, health-permission или создания experiment onboarding требует явного подтверждения совершеннолетия. При отказе профиль и experiment не создаются, а показывается безопасный выход или информационный экран. Локально рядом с onboarding progress хранится только boolean-подобное eligibility confirmation, не дата рождения; удаление профиля удаляет и его. Владельцы часов — cohort первичной проверки, а не критерий допуска: ручной режим даёт тот же продукт без часов и health-permissions. Это wellness-инструмент, не диагностика, лечение, назначение лекарств, клиническое обещание или источник универсальных норм.
 
 Пользователь выбирает один protocol template и получает один active experiment. У эксперимента один primary outcome, а наблюдение разделено на baseline и change phases. Отсутствующие или недостаточные данные — нормальный результат, не ноль, отказ либо доказательство эффекта.
 
@@ -74,6 +74,6 @@ Manual flow предлагает «продолжить вручную» и за
 
 ## Отложенные решения и совместимость
 
-Открыты: точные anchors/ranges оценок, baseline/длительность/stop rules, формальное template-goal-context mapping и состояние «нет рекомендации», поддерживаемые health source/OS/legal launch market, автоматический primary sleep outcome, encryption/backup/retention, onboarding persistence/duplicate submit, localization и age confirmation.
+Открыты: точные anchors/ranges оценок, baseline/длительность/stop rules, формальное template-goal-context mapping и состояние «нет рекомендации», поддерживаемые health source/OS/legal launch market, автоматический primary sleep outcome, encryption/backup/retention, onboarding persistence/duplicate submit, localization, legal copy и market validation для eligibility confirmation.
 
 Это продуктовые catalog ID для будущих domain value objects. Их нельзя смешивать с текущими route-safe `ExperimentId`, presentation `MetricKind` или `AutomationId`.
