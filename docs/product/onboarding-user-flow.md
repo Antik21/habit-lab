@@ -13,17 +13,17 @@
 
 Launch Gate — не Screen Spec: это решение реализации [DEN-33](https://linear.app/denis-apps/issue/DEN-33). Нового пользователя оно направляет в Welcome, возобновляемый draft — в его checkpoint, а completed marker — в Today только после актуального подтверждения ровно одного active experiment. Inconsistent completed checkpoint восстанавливается в recovery mode существующего [DEN-28](https://linear.app/denis-apps/issue/DEN-28) Setup при 0 active и валидном draft, блокируется там же при >1 active либо откатывается к ближайшему достижимому upstream шагу. Setup recovery — не новый destination. Today — только destination после Setup и реализация [DEN-41](https://linear.app/denis-apps/issue/DEN-41), не onboarding Screen Spec.
 
-Внутри Welcome до любого product answer обязательны состояние и явное подтверждение 18+. Отказ ведёт в safe exit/info; profile и experiment не создаются. Отдельного eligibility Screen Spec нет. Checkpoint хранит только его устойчивое значение: шаг, typed IDs и draft, но не `UiState`; при relaunch актуальные данные перечитываются и flow заново проверяет достижимость шага.
+Внутри Welcome до любого product answer обязательно явное 18+ confirmation. Fresh confirmation локально до CTA; confirmed CTA сохраняет eligibility и checkpoint. Decline или явная отмена в confirmed re-entry атомарно очищают eligibility и весь downstream checkpoint/answers/draft, затем открывают terminal informational state внутри Welcome; Profile и Experiment ещё не созданы. Checkpoint хранит шаг, typed IDs и draft, но не `UiState`; relaunch всегда заново входит через Launch Gate, который перечитывает данные и проверяет достижимость.
 
 Manual никогда не перескакивает в Setup: он приходит в Status/coverage как явный manual data plan и лишь затем может продолжить. Permission, наличие провайдера и coverage — независимые факты: missing не равно zero, пустое чтение iOS не равно denied. Назад идёт по цепочке и не отзывает уже выданное системное permission.
 
-## Реестр будущих Screen Spec
+## Реестр Screen Spec
 
-Пока attached Linear documents отсутствуют, поэтому следующие issue URL — временные ссылки на spec owner; соответствующие задачи заменят их URL документов и добавят backlink на этот User Flow.
+Реестр ссылается на attached Linear documents по мере их создания; issue URLs остаются временными только для ещё не созданных specs. Каждый attached document добавляет backlink на этот User Flow.
 
-| Screen Spec | Временный owner | Обязательные outgoing transitions |
+| Screen Spec | Owner / document | Обязательные outgoing transitions |
 | --- | --- | --- |
-| Welcome | [DEN-26](https://linear.app/denis-apps/issue/DEN-26) | 18+ подтверждено → Outcome; отказ → safe exit/info; Back/relaunch → Launch Gate. |
+| Welcome | [DEN-26](https://linear.app/denis-apps/document/onboarding-0320-screen-spec-welcome-2698906cbdb6) | confirmed → Outcome; declined → terminal safe exit/info внутри Welcome; root Back → host exit; relaunch → Launch Gate. |
 | Outcome | [DEN-25](https://linear.app/denis-apps/issue/DEN-25) | valid или изменённый Goal → Context для подтверждения; missing/invalid/unresolved → controlled stay; Back → Welcome. |
 | Context | [DEN-27](https://linear.app/denis-apps/issue/DEN-27) | valid/changed или осознанно confirmed empty/none Context → Protocols/recompute; missing/invalid/unresolved → controlled stay; Back → Outcome; связь с `not-sure-yet` остаётся TBD. |
 | Recommended protocols | [DEN-29](https://linear.app/denis-apps/issue/DEN-29) | selected или изменённый template → Health explanation; loading/error/empty stays; error → Retry/recompute; empty → только Back → Context. |
@@ -42,8 +42,13 @@ Manual никогда не перескакивает в Setup: он прихо�
 | Launch Gate | completed marker, 0 active и Setup draft валиден | Валидный draft сохраняется; downstream, несовместимый с актуальным чтением, очищается. | Существующий Setup в recovery mode |
 | Launch Gate | completed marker, 0 active и валидного Setup draft нет | Incompatible downstream очищается, совместимые upstream typed IDs/draft сохраняются, затем recompute/refresh. | Ближайший достижимый upstream шаг |
 | Launch Gate | completed marker и >1 active | Создание experiment блокируется до reconciliation; конкретный storage/repair/reconciliation mechanism остаётся TBD. | Существующий Setup в controlled blocking recovery state |
-| Welcome | 18+ подтверждено | Eligibility confirmation и checkpoint. | Outcome |
-| Welcome | eligibility declined | Нет product answers, profile или experiment. | Safe exit/info |
+| Welcome | fresh confirmed CTA | Атомарно сохраняются eligibility confirmation и checkpoint. | Outcome |
+| Welcome | fresh decline | Product data ещё нет. | Terminal safe exit/info внутри Welcome |
+| Welcome | confirmed re-entry CTA без изменения state | Новая запись не нужна. | Outcome |
+| Welcome | eligibility declined или explicit revoke в confirmed re-entry | Атомарно очищаются eligibility и весь downstream onboarding checkpoint/answers/draft; Profile/Experiment не созданы. | Terminal safe exit/info внутри Welcome |
+| Welcome | revoke persistence failure | Остаётся last persisted confirmed state; retry, без terminal/forward transition. | Welcome |
+| Welcome | root Back | Product data не создаются и не меняются. | Host/root exit |
+| Outcome | Back | Persisted confirmed eligibility сохраняется. | Welcome в confirmed re-entry state |
 | Outcome | Goal выбран или изменён | Goal и независимый Context selection сохраняются; ranking, template, health/status и Setup draft очищаются. | Context для подтверждения |
 | Outcome | missing, invalid или unresolved Goal | Typed UI draft и validation/error сохраняются локально; подтверждённые Goal/Context/checkpoint не подменяются invalid draft, experiment не создаётся. | Outcome (controlled stay) |
 | Context | Context подтверждён или изменён | Goal и Context; ranking/template и всё downstream очищается. | Recommended protocols (recompute) |
@@ -65,8 +70,8 @@ Manual никогда не перескакивает в Setup: он прихо�
 | Status/coverage | refresh failure; retry | Последний известный status и draft; retry перечитывает данные. | Status/coverage |
 | Health explanation или Status/coverage | manual выбран | Template/draft; создаётся и явно показывается manual data plan. | Status/coverage |
 | Status/coverage | manual plan подтверждён | Явный manual plan и draft. | Setup |
-| Любой onboarding Screen Spec | Back | Upstream answers/checkpoint; permission не отзывается. | Предыдущий достижимый шаг |
-| Любой незавершённый шаг | relaunch | Checkpoint, typed IDs и draft, не `UiState`; данные перечитываются. | Launch Gate |
+| Любой onboarding Screen Spec, кроме root Welcome | Back | Upstream answers/checkpoint; permission не отзывается. | Предыдущий достижимый шаг |
+| Любой незавершённый шаг, включая Welcome | relaunch | Checkpoint, typed IDs и draft, не `UiState`; данные перечитываются. | Launch Gate |
 | Setup | validation failure | Draft и ошибки в текущем шаге; experiment не создаётся. | Setup |
 | Setup | valid save, включая 0-active recovery | Перед save актуально перечитывается cardinality; атомарное создание разрешено только при всё ещё 0 active, постусловие — ровно 1 active experiment и completed checkpoint. | Today |
 | Setup | recovery save видит nonzero cardinality или conflict | Новый experiment не создаётся; конфликт остаётся управляемым до reconciliation. | Setup (controlled stay) |
