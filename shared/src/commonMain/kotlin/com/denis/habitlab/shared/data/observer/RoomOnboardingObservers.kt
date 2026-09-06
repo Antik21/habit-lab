@@ -50,19 +50,14 @@ internal class RoomOnboardingObservers(
         }
 
     override fun observeActiveProtocol(): Flow<ActiveOnboardingProtocolObservation> = localDataSource.observeActiveProtocol()
-        .map { protocol ->
-            if (protocol == null) {
+        .map { snapshot ->
+            if (snapshot == null) {
                 ActiveOnboardingProtocolObservation.Missing
             } else {
-                val configuration = localDataSource.latestConfiguration(
-                    com.denis.habitlab.shared.domain.model.OnboardingProtocolId.fromPersisted(protocol.id)
-                        ?: return@map ActiveOnboardingProtocolObservation.Invalid(
-                            InvalidOnboardingPersistence("onboarding_protocol.id", protocol.id),
-                        ),
-                ) ?: return@map ActiveOnboardingProtocolObservation.Invalid(
+                val configuration = snapshot.configuration ?: return@map ActiveOnboardingProtocolObservation.Invalid(
                     InvalidOnboardingPersistence("onboarding_protocol.configuration", "missing"),
                 )
-                when (val decoded = protocol.toDomain(configuration)) {
+                when (val decoded = snapshot.protocol.toDomain(configuration)) {
                     is OnboardingDecode.Valid -> ActiveOnboardingProtocolObservation.Available(decoded.value)
                     is OnboardingDecode.Invalid -> ActiveOnboardingProtocolObservation.Invalid(decoded.reason)
                 }

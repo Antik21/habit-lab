@@ -1,6 +1,7 @@
 package com.denis.habitlab.shared.data.local
 
 import androidx.room3.ColumnInfo
+import androidx.room3.Embedded
 import androidx.room3.Entity
 import androidx.room3.ForeignKey
 import androidx.room3.Index
@@ -118,6 +119,19 @@ internal data class OnboardingProtocolConfigurationEntity(
     val sourceSetupDraftId: String,
     @ColumnInfo(name = "source_setup_draft_revision")
     val sourceSetupDraftRevision: Long,
+)
+
+/**
+ * A single Room-query snapshot of the active protocol and its latest configuration.
+ *
+ * The nullable embedded configuration represents a genuine missing configuration after the left
+ * join so the observer can expose invalid persistence instead of manufacturing a configuration.
+ */
+internal data class ActiveOnboardingProtocolSnapshot(
+    @Embedded(prefix = "protocol_")
+    val protocol: OnboardingProtocolEntity,
+    @Embedded(prefix = "configuration_")
+    val configuration: OnboardingProtocolConfigurationEntity?,
 )
 
 internal const val ONBOARDING_SINGLETON_ID = 1

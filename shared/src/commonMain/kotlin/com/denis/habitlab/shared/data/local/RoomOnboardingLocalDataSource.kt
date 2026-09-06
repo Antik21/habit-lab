@@ -17,7 +17,7 @@ internal class RoomOnboardingLocalDataSource(database: HabitLabDatabase) {
 
     fun observeState(): Flow<OnboardingStateEntity?> = dao.observeState()
 
-    fun observeActiveProtocol(): Flow<OnboardingProtocolEntity?> = dao.observeActiveProtocol()
+    fun observeActiveProtocol(): Flow<ActiveOnboardingProtocolSnapshot?> = dao.observeActiveProtocol()
 
     suspend fun confirmEligibility(): OnboardingStateWrite = dao.confirmEligibility()
 
@@ -51,8 +51,6 @@ internal class RoomOnboardingLocalDataSource(database: HabitLabDatabase) {
         sourceDraft: SetupDraftReference,
     ): AppendConfigurationInsert = dao.appendConfiguration(protocolId.value, sourceDraft.toPersisted())
 
-    suspend fun latestConfiguration(protocolId: OnboardingProtocolId): OnboardingProtocolConfigurationEntity? =
-        dao.latestConfiguration(protocolId.value)
 }
 
 private fun ConfirmedContextSelection.toPersistedContextIds(): String = when (this) {

@@ -25,12 +25,25 @@ internal interface OnboardingDao {
     suspend fun replaceState(state: OnboardingStateEntity)
 
     @Query(
-        "SELECT DISTINCT protocols.* FROM onboarding_protocols AS protocols " +
+        "SELECT " +
+            "protocols.id AS protocol_id, " +
+            "protocols.template_id AS protocol_template_id, " +
+            "protocols.status AS protocol_status, " +
+            "protocols.active_slot AS protocol_active_slot, " +
+            "configurations.protocol_id AS configuration_protocol_id, " +
+            "configurations.version AS configuration_version, " +
+            "configurations.source_setup_draft_id AS configuration_source_setup_draft_id, " +
+            "configurations.source_setup_draft_revision AS configuration_source_setup_draft_revision " +
+            "FROM onboarding_protocols AS protocols " +
             "LEFT JOIN onboarding_protocol_configurations AS configurations " +
             "ON protocols.id = configurations.protocol_id " +
+            "AND configurations.version = (" +
+            "SELECT MAX(latest.version) FROM onboarding_protocol_configurations AS latest " +
+            "WHERE latest.protocol_id = protocols.id" +
+            ") " +
             "WHERE protocols.active_slot = $ONBOARDING_ACTIVE_SLOT LIMIT 1",
     )
-    fun observeActiveProtocol(): Flow<OnboardingProtocolEntity?>
+    fun observeActiveProtocol(): Flow<ActiveOnboardingProtocolSnapshot?>
 
     @Query("SELECT * FROM onboarding_protocols WHERE active_slot = $ONBOARDING_ACTIVE_SLOT LIMIT 1")
     suspend fun activeProtocol(): OnboardingProtocolEntity?

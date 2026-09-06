@@ -341,6 +341,79 @@ class RoomOnboardingStoreTest {
     }
 
     @Test
+    fun activeProtocolDaoEmitsJoinedSnapshotWhoseConfigurationIsLatestAfterAppend() = runBlocking {
+        val database = inMemoryDatabase()
+        try {
+            val repository = repository(database)
+            establishHealthPrerequisites(repository)
+            val initialDraft = draft("snapshot-attempt", 1)
+            val appendedDraft = draft("snapshot-attempt", 2)
+            val protocolId = protocol("onboarding-snapshot")
+            saved(repository.saveSetupDraftReference(initialDraft))
+
+            database.onboardingDao().observeActiveProtocol().test {
+                assertEquals(null, awaitItem())
+
+                val created = assertIs<ActiveProtocolWriteResult.Created>(
+                    repository.createInitialActiveProtocol(protocolId, initialDraft),
+                ).protocol
+                val createdSnapshot: ActiveOnboardingProtocolSnapshot = requireNotNull(awaitItem())
+                assertEquals(protocolId.value, createdSnapshot.protocol.id)
+                assertEquals(1, createdSnapshot.configuration?.version)
+                assertEquals(initialDraft.attemptId.value, createdSnapshot.configuration?.sourceSetupDraftId)
+                assertEquals(initialDraft.revision, createdSnapshot.configuration?.sourceSetupDraftRevision)
+                assertEquals(created.configuration.version, createdSnapshot.configuration?.version)
+
+                saved(repository.saveSetupDraftReference(appendedDraft))
+                val appended = assertIs<ActiveProtocolWriteResult.Appended>(
+                    repository.appendProtocolConfiguration(protocolId, appendedDraft),
+                ).protocol
+                val latestSnapshot: ActiveOnboardingProtocolSnapshot = requireNotNull(awaitItem())
+                assertEquals(protocolId.value, latestSnapshot.protocol.id)
+                assertEquals(2, latestSnapshot.configuration?.version)
+                assertEquals(appendedDraft.attemptId.value, latestSnapshot.configuration?.sourceSetupDraftId)
+                assertEquals(appendedDraft.revision, latestSnapshot.configuration?.sourceSetupDraftRevision)
+                assertEquals(appended.configuration.version, latestSnapshot.configuration?.version)
+                expectNoEvents()
+            }
+        } finally {
+            database.close()
+        }
+    }
+
+    @Test
+    fun activeProtocolObserverReportsGenuineMissingConfigurationAndRecoversAfterCleanup() = runBlocking {
+        val database = inMemoryDatabase()
+        try {
+            val observers = observers(database)
+            observers.observeActiveProtocol().test {
+                assertEquals(ActiveOnboardingProtocolObservation.Missing, awaitItem())
+
+                database.onboardingDao().insertProtocol(
+                    OnboardingProtocolEntity(
+                        id = "raw-missing-configuration",
+                        templateId = ProtocolTemplateId.AFTER_DINNER_WALK.persistedValue,
+                        status = ONBOARDING_ACTIVE_STATUS,
+                        activeSlot = ONBOARDING_ACTIVE_SLOT,
+                    ),
+                )
+                assertEquals(
+                    ActiveOnboardingProtocolObservation.Invalid(
+                        InvalidOnboardingPersistence("onboarding_protocol.configuration", "missing"),
+                    ),
+                    awaitItem(),
+                )
+
+                database.onboardingDao().deleteAllProtocols()
+                assertEquals(ActiveOnboardingProtocolObservation.Missing, awaitItem())
+                expectNoEvents()
+            }
+        } finally {
+            database.close()
+        }
+    }
+
+    @Test
     fun corruptPersistedIdsBecomeInvalidObservationsAndDatabaseFailuresStayTyped() = runBlocking {
         val database = inMemoryDatabase()
         val repository = repository(database)
