@@ -11,9 +11,9 @@
 
 Канонический путь: **Launch Gate** (невидимое решение) → **Welcome** → **Outcome** → **Context** → **Recommended protocols** → **Health explanation** → platform permission **или** manual → **Status/coverage** → **Setup** → **Today**.
 
-Launch Gate — не Screen Spec: это решение реализации [DEN-33](https://linear.app/denis-apps/issue/DEN-33). Нового пользователя оно направляет в Welcome, возобновляемый draft — в его checkpoint, а completed marker — в Today только после актуального подтверждения ровно одного active experiment. Inconsistent completed checkpoint восстанавливается в recovery mode существующего [DEN-28](https://linear.app/denis-apps/issue/DEN-28) Setup при 0 active и валидном draft, блокируется там же при >1 active либо откатывается к ближайшему достижимому upstream шагу. Setup recovery — не новый destination. Today — только destination после Setup и реализация [DEN-41](https://linear.app/denis-apps/issue/DEN-41), не onboarding Screen Spec.
+Launch Gate — [DEN-33](https://linear.app/denis-apps/issue/DEN-33) implementation, не Screen Spec. Новый пользователь → Welcome; возобновляемый draft → checkpoint; completed marker → Today только после актуального подтверждения ровно одного active experiment. При inconsistent completed checkpoint существующий [DEN-28](https://linear.app/denis-apps/issue/DEN-28) Setup восстанавливает 0 active с валидным draft, блокирует >1 active, иначе откатывает к ближайшему достижимому upstream. Setup recovery не отдельный destination. Today после Setup принадлежит [DEN-41](https://linear.app/denis-apps/issue/DEN-41), не onboarding Screen Spec.
 
-Внутри Welcome до любого product answer обязательно явное 18+ confirmation. Fresh confirmation локально до CTA; confirmed CTA сохраняет eligibility и checkpoint. Decline или явная отмена в confirmed re-entry атомарно очищают eligibility и весь downstream checkpoint/answers/draft, затем открывают terminal informational state внутри Welcome; Profile и Experiment ещё не созданы. Checkpoint хранит шаг, typed IDs и draft, но не `UiState`; relaunch всегда заново входит через Launch Gate, который перечитывает данные и проверяет достижимость.
+Welcome требует явного 18+ confirmation до product answers. Fresh confirmation локальна до CTA; CTA сохраняет eligibility и checkpoint. Decline/revoke в confirmed re-entry атомарно очищает eligibility и downstream checkpoint/answers/draft, затем открывает terminal state Welcome; Profile/Experiment ещё нет. Checkpoint хранит шаг, typed IDs и draft, не `UiState`; relaunch входит через Launch Gate с перечитыванием и проверкой достижимости.
 
 Manual никогда не перескакивает в Setup: он приходит в Status/coverage как явный manual data plan и лишь затем может продолжить. Permission, наличие провайдера и coverage — независимые факты: missing не равно zero, пустое чтение iOS не равно denied. Назад идёт по цепочке и не отзывает уже выданное системное permission.
 
@@ -24,7 +24,7 @@ Manual никогда не перескакивает в Setup: он прихо�
 | Screen Spec | Owner / document | Обязательные outgoing transitions |
 | --- | --- | --- |
 | Welcome | [DEN-26](https://linear.app/denis-apps/document/onboarding-0320-screen-spec-welcome-2698906cbdb6) | confirmed → Outcome; declined → terminal safe exit/info внутри Welcome; root Back → host exit; relaunch → Launch Gate. |
-| Outcome | [DEN-25](https://linear.app/denis-apps/issue/DEN-25) | valid или изменённый Goal → Context для подтверждения; missing/invalid/unresolved → controlled stay; Back → Welcome. |
+| Outcome | [DEN-25](https://linear.app/denis-apps/document/onboarding-0420-screen-spec-vybor-osnovnogo-rezultata-01a8c5eb01b3) | valid или изменённый Goal → Context для подтверждения; missing/invalid/unresolved → controlled stay; Back → Welcome. |
 | Context | [DEN-27](https://linear.app/denis-apps/issue/DEN-27) | valid/changed или осознанно confirmed empty/none Context → Protocols/recompute; missing/invalid/unresolved → controlled stay; Back → Outcome; связь с `not-sure-yet` остаётся TBD. |
 | Recommended protocols | [DEN-29](https://linear.app/denis-apps/issue/DEN-29) | selected или изменённый template → Health explanation; loading/error/empty stays; error → Retry/recompute; empty → только Back → Context. |
 | Health explanation | [DEN-30](https://linear.app/denis-apps/issue/DEN-30) | platform permission result → Status/coverage; manual → explicit manual plan in Status; Back → Protocols. |
@@ -49,7 +49,8 @@ Manual никогда не перескакивает в Setup: он прихо�
 | Welcome | revoke persistence failure | Остаётся last persisted confirmed state; retry, без terminal/forward transition. | Welcome |
 | Welcome | root Back | Product data не создаются и не меняются. | Host/root exit |
 | Outcome | Back | Persisted confirmed eligibility сохраняется. | Welcome в confirmed re-entry state |
-| Outcome | Goal выбран или изменён | Goal и независимый Context selection сохраняются; ranking, template, health/status и Setup draft очищаются. | Context для подтверждения |
+| Outcome | Первый Goal или persisted Goal изменён | Атомарно сохранить Goal, eligibility и независимый Context; очистить ranking/result, template, app-owned health/data plan/status/coverage и Setup draft; checkpoint → Context. | Context для подтверждения |
+| Outcome | CTA: тот же persisted Goal | Goal/downstream — data no-op; checkpoint Context записать атомарно до navigation. Failure сохраняет Outcome checkpoint; controlled stay. Context подтвердить до recompute. | Context |
 | Outcome | missing, invalid или unresolved Goal | Typed UI draft и validation/error сохраняются локально; подтверждённые Goal/Context/checkpoint не подменяются invalid draft, experiment не создаётся. | Outcome (controlled stay) |
 | Context | Context подтверждён или изменён | Goal и Context; ranking/template и всё downstream очищается. | Recommended protocols (recompute) |
 | Context | осознанно подтверждённый empty/none | Подтверждённые Goal/Context/checkpoint; ranking пересчитывается, experiment не создаётся. Связь с `not-sure-yet` остаётся TBD. | Recommended protocols (recompute) |
