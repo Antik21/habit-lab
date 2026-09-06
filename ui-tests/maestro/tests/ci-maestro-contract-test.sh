@@ -131,6 +131,13 @@ require_code_line_count() {
         fail_test "$description; expected $wanted_count occurrence(s), found $actual_count"
 }
 
+has_actionable_inventory_diagnostic() {
+    local output="$1"
+
+    printf '%s\n' "$output" | grep -Eiq \
+        '(^|[^[:alnum:]_])(error|unavailable|missing)([^[:alnum:]_]|$)|not[[:space:]]+found'
+}
+
 job_block() {
     local job_name="$1"
 
@@ -290,6 +297,16 @@ assert_step_extraction_negative_probe() {
     fi
 }
 
+assert_inventory_diagnostic_classifier_negative_probe() {
+    if has_actionable_inventory_diagnostic 'unexpected xcrun invocation: simctl list runtimes -j'; then
+        fail_test 'stub unexpected-invocation noise satisfied the inventory diagnostic classifier'
+    fi
+    if ! has_actionable_inventory_diagnostic \
+        'error: selected Xcode does not provide the required simulator runtime'; then
+        fail_test 'an explicit inventory error did not satisfy the diagnostic classifier'
+    fi
+}
+
 cleanup_inventory_probe() {
     if [[ -n "${INVENTORY_PROBE_ROOT:-}" && -d "$INVENTORY_PROBE_ROOT" ]]; then
         find "$INVENTORY_PROBE_ROOT" -depth -delete
@@ -415,7 +432,7 @@ assert_inventory_failure_is_diagnostic() {
         INVENTORY_PROBE_ROOT=''
         fail_test "$inventory_kind inventory mismatch did not identify $expected_identifier"
     fi
-    if ! printf '%s\n' "$output" | grep -Eiq 'error|unavailable|missing|not found|expected'; then
+    if ! has_actionable_inventory_diagnostic "$output"; then
         cleanup_inventory_probe
         INVENTORY_PROBE_ROOT=''
         fail_test "$inventory_kind inventory mismatch did not provide an actionable diagnostic"
@@ -474,6 +491,7 @@ assert_mktemp_failure_stops_before_simctl_create() {
 
 [[ -f "$WORKFLOW" ]] || fail_test 'shared CI workflow is missing'
 assert_step_extraction_negative_probe
+assert_inventory_diagnostic_classifier_negative_probe
 INVENTORY_PROBE_ROOT=''
 INVENTORY_CREATE_SCRIPT=''
 trap cleanup_inventory_test_artifacts EXIT
