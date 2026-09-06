@@ -50,7 +50,7 @@ Manual никогда не перескакивает в Setup: он прихо�
 | Welcome | root Back | Product data не создаются и не меняются. | Host/root exit |
 | Outcome | Back | Persisted confirmed eligibility сохраняется. | Welcome в confirmed re-entry state |
 | Outcome | Первый Goal или persisted Goal изменён | Атомарно сохранить Goal, eligibility и независимый Context; очистить ranking/result, template, app-owned health/data plan/status/coverage и Setup draft; checkpoint → Context. | Context для подтверждения |
-| Outcome | CTA с тем же persisted Goal | Data no-op: Goal/downstream не переписываются и повторно не инвалидируются; checkpoint остаётся/переходит в Context. Context подтверждается до recompute. | Context |
+| Outcome | CTA: тот же persisted Goal | Goal/downstream — data no-op; checkpoint Context записать атомарно до navigation. Failure сохраняет Outcome checkpoint; controlled stay. Context подтвердить до recompute. | Context |
 | Outcome | missing, invalid или unresolved Goal | Typed UI draft и validation/error сохраняются локально; подтверждённые Goal/Context/checkpoint не подменяются invalid draft, experiment не создаётся. | Outcome (controlled stay) |
 | Context | Context подтверждён или изменён | Goal и Context; ranking/template и всё downstream очищается. | Recommended protocols (recompute) |
 | Context | осознанно подтверждённый empty/none | Подтверждённые Goal/Context/checkpoint; ranking пересчитывается, experiment не создаётся. Связь с `not-sure-yet` остаётся TBD. | Recommended protocols (recompute) |
