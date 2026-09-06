@@ -1,3 +1,7 @@
 #!/usr/bin/env bash
 
+if [[ -n "${STUB_JAVA_LOG:-}" ]]; then
+    printf 'java=%s\n' "$0" >>"$STUB_JAVA_LOG"
+fi
+
 printf 'openjdk version "21.0.0"\n' >&2

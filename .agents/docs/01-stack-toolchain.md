@@ -9,7 +9,7 @@ Kotlin targets are Android, iOS arm64 device, and iOS arm64 simulator. `iosX64` 
 
 `./gradlew --version` reports Gradle's embedded Kotlin (currently 2.2.21), not the project's Kotlin plugin version. Read `gradle/libs.versions.toml` for project versions.
 
-Cross-platform UI automation uses the external Maestro CLI pinned to 2.6.1; it requires JDK 17 or newer and is not a Gradle dependency. The AutoDev frozen-checklist gate requires Python 3.9 or newer and uses only the standard library; Maestro itself does not require Python. The recorded local environment is macOS 26.6.2 arm64 with Xcode 26.6/iOS 26.5, an Android API 36 emulator, JBR 21 for Maestro, and Python 3.9.6. These local facts do not replace the CI pins above.
+Cross-platform UI automation uses the external Maestro CLI pinned to 2.6.1; CI downloads its exact release archive and verifies SHA-256 `3440825f514f537c6a96bcf5de995780c2a4a7f83a43208fdc95d4f1fecfad3b`. It requires JDK 17 or newer and is not a Gradle dependency. The runner preserves a valid explicit `JAVA_HOME` (including CI's Temurin 17); macOS falls back to JBR 21 only when `JAVA_HOME` is absent or invalid. The AutoDev frozen-checklist gate requires Python 3.9 or newer and uses only the standard library; Maestro itself does not require Python. The recorded local environment is macOS 26.6.2 arm64 with Xcode 26.6/iOS 26.5, an Android API 36 emulator, JBR 21 for Maestro, and Python 3.9.6. These local facts do not replace the CI pins above.
 
 ## Commands
 
@@ -30,7 +30,7 @@ python3 .agents/skills/habit-lab-autodev/scripts/autodev_gate.py --help
 python3 .agents/skills/habit-lab-autodev/scripts/autodev_memory.py --help
 ```
 
-`:shared:check` includes architecture and documentation checks, plus the Maestro shell contract check on non-Windows hosts when Bash is available. Native Windows and hosts without Bash skip that shell-only task and do not establish its coverage. Android device tests require one API 33+ device; CI uses an API 36 Google APIs x86_64 emulator. Run `:shared:iosSimulatorArm64Test` on Apple Silicon and `:shared:iosX64Test` on Intel macOS, where that target is configured. See [testing and verification](07-testing-verification.md) before choosing a subset.
+`:shared:check` includes architecture and documentation checks, plus the Maestro shell contract check on non-Windows hosts when Bash is available. Native Windows and hosts without Bash skip that shell-only task and do not establish its coverage. Android device tests require one API 33+ device; CI uses an API 36 Google APIs x86_64 emulator. The CI parity smoke then invokes the runner on that emulator and on one job-owned iPhone 17 Pro simulator using the installed iOS 26.4 runtime under selected Xcode 26.4.1. Run `:shared:iosSimulatorArm64Test` on Apple Silicon and `:shared:iosX64Test` on Intel macOS, where that target is configured. See [testing and verification](07-testing-verification.md) before choosing a subset.
 
 The Maestro runner owns CLI invocation and targets `ui-tests/maestro/flows/reference-screens.yaml`; `ui-tests/maestro/config.yaml` is its shared configuration. Platform-only system gestures live under `ui-tests/maestro/flows/platform/`. The runner and flows are repository files, while the CLI remains external.
 

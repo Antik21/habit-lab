@@ -43,8 +43,8 @@ evidence is ignored build output and is not committed.
 
 The execution baseline is emulator/simulator-only. The current local environment is macOS 26.6.2 arm64,
 Xcode 26.6 with an iOS 26.5 simulator, an Android API 36 emulator, and JBR 21 for Maestro. Maestro
-requires JDK 17 or newer and does not require Python; local Python 3.9.6 is incidental. Repository CI
-continues to use Xcode 26.4.1 and Temurin 17 and does not yet run this Maestro contour.
+requires JDK 17 or newer and does not require Python; local Python 3.9.6 is incidental. Before
+DEN-21, repository CI used Xcode 26.4.1 and Temurin 17 but did not run this Maestro contour.
 
 ## Alternatives
 
@@ -80,6 +80,20 @@ current Maestro scenario remains valid on that simulator. Combined with the unav
 runtime, however, this is a compatibility blocker for claiming minimum-iOS 16 runtime or linked
 artifact compatibility. It must be investigated and resolved before the runtime-adapter/release
 gate makes that claim; DEN-15 records the observation without changing the dependency.
+
+## Follow-up (2026-09-06)
+
+DEN-21 extends this accepted contour into CI without changing its one common flow or thin native
+hosts. Android runs the existing API 36 Google APIs x86_64 emulator and iOS creates one uniquely
+named, job-owned iPhone 17 Pro for the installed iOS 26.4 runtime through Xcode 26.4.1; both jobs
+invoke only the repository runner with their explicit target and a CI-unique run ID. CI downloads
+Maestro 2.6.1 from its pinned release, verifies its SHA-256, and preserves the runner's canonical
+`command.log`, `report.xml`, screenshots, and debug output as per-platform artifacts even after a
+failure. The iOS cleanup shuts down and deletes only the UDID it created.
+
+This CI smoke is direct Android/iOS current-runtime parity evidence, not proof on the minimum iOS
+16 runtime. The DEN-15 iOS 26.5 run and its `libicu` warning above remain historical evidence and
+do not establish that minimum-runtime or linked-artifact compatibility.
 
 ## Migration/rollback
 
@@ -117,9 +131,9 @@ three screenshots, non-empty `debug/maestro.log`, and the common-flow command JS
 validates those evidence postconditions after execution. Neither directory contains a filename with
 `failure`, `error`, or `❌`, and the Maestro results contain no stale test failures. The iOS command
 log is not warning-free: its linker reports that `libicu.icudtl_dat.o` was built for iOS Simulator
-18.5 while the application target is 16.0. This is emulator/simulator-only local evidence: Maestro
-is still absent from repository CI, and minimum-iOS 16 runtime and linked-artifact compatibility
-proof remain pending.
+18.5 while the application target is 16.0. This was emulator/simulator-only local evidence before
+DEN-21, when Maestro was absent from repository CI; minimum-iOS 16 runtime and linked-artifact
+compatibility proof remain pending.
 
 ## Related docs
 
