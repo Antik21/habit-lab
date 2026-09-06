@@ -1,0 +1,474 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 2,
+    "identityHash": "a6e371d63bdfd8a1989e7fbb4742c322",
+    "entities": [
+      {
+        "tableName": "experiments",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `display_name` TEXT NOT NULL, `status` TEXT NOT NULL, `active_slot` INTEGER, `created_utc_millis` INTEGER NOT NULL, `created_offset_seconds` INTEGER NOT NULL, `created_local_date` TEXT NOT NULL, `updated_utc_millis` INTEGER NOT NULL, `updated_offset_seconds` INTEGER NOT NULL, `updated_local_date` TEXT NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "displayName",
+            "columnName": "display_name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "activeSlot",
+            "columnName": "active_slot",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "createdUtcMillis",
+            "columnName": "created_utc_millis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdOffsetSeconds",
+            "columnName": "created_offset_seconds",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdLocalDate",
+            "columnName": "created_local_date",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedUtcMillis",
+            "columnName": "updated_utc_millis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedOffsetSeconds",
+            "columnName": "updated_offset_seconds",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedLocalDate",
+            "columnName": "updated_local_date",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_experiments_active_slot",
+            "unique": true,
+            "columnNames": [
+              "active_slot"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_experiments_active_slot` ON `${TABLE_NAME}` (`active_slot`)"
+          }
+        ]
+      },
+      {
+        "tableName": "daily_check_ins",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`experiment_id` TEXT NOT NULL, `check_in_local_date` TEXT NOT NULL, `outcome` TEXT NOT NULL, `occurred_utc_millis` INTEGER, `occurred_offset_seconds` INTEGER, `recorded_utc_millis` INTEGER NOT NULL, `recorded_offset_seconds` INTEGER NOT NULL, `recorded_local_date` TEXT NOT NULL, PRIMARY KEY(`experiment_id`, `check_in_local_date`), FOREIGN KEY(`experiment_id`) REFERENCES `experiments`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "experimentId",
+            "columnName": "experiment_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "checkInLocalDate",
+            "columnName": "check_in_local_date",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "outcome",
+            "columnName": "outcome",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "occurredUtcMillis",
+            "columnName": "occurred_utc_millis",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "occurredOffsetSeconds",
+            "columnName": "occurred_offset_seconds",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "recordedUtcMillis",
+            "columnName": "recorded_utc_millis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recordedOffsetSeconds",
+            "columnName": "recorded_offset_seconds",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recordedLocalDate",
+            "columnName": "recorded_local_date",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "experiment_id",
+            "check_in_local_date"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_daily_check_ins_experiment_id",
+            "unique": false,
+            "columnNames": [
+              "experiment_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_daily_check_ins_experiment_id` ON `${TABLE_NAME}` (`experiment_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "experiments",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "experiment_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "onboarding_catalog_entries",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`catalog_type` TEXT NOT NULL, `catalog_id` TEXT NOT NULL, `display_name` TEXT NOT NULL, `sort_position` INTEGER NOT NULL, `manual_capable` INTEGER NOT NULL, PRIMARY KEY(`catalog_type`, `catalog_id`))",
+        "fields": [
+          {
+            "fieldPath": "catalogType",
+            "columnName": "catalog_type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "catalogId",
+            "columnName": "catalog_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "displayName",
+            "columnName": "display_name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sortPosition",
+            "columnName": "sort_position",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "manualCapable",
+            "columnName": "manual_capable",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "catalog_type",
+            "catalog_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_onboarding_catalog_entries_catalog_type_sort_position",
+            "unique": true,
+            "columnNames": [
+              "catalog_type",
+              "sort_position"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_onboarding_catalog_entries_catalog_type_sort_position` ON `${TABLE_NAME}` (`catalog_type`, `sort_position`)"
+          }
+        ]
+      },
+      {
+        "tableName": "onboarding_state",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`singleton_id` INTEGER NOT NULL, `eligibility` TEXT NOT NULL, `progress_kind` TEXT NOT NULL, `progress_step` TEXT, `goal_id` TEXT, `contexts_confirmed` INTEGER NOT NULL, `contexts_require_confirmation` INTEGER NOT NULL, `context_ids` TEXT NOT NULL, `template_id` TEXT, `has_health_state` INTEGER NOT NULL, `health_capability_id` TEXT, `health_capability_value` TEXT, `health_provider_availability` TEXT, `health_access_outcome` TEXT, `health_visible_records` TEXT, `health_coverage` TEXT, `health_freshness` TEXT, `health_suitability` TEXT, `manual_plan_state` TEXT, `setup_draft_attempt_id` TEXT, `setup_draft_revision` INTEGER, PRIMARY KEY(`singleton_id`))",
+        "fields": [
+          {
+            "fieldPath": "singletonId",
+            "columnName": "singleton_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "eligibility",
+            "columnName": "eligibility",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "progressKind",
+            "columnName": "progress_kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "progressStep",
+            "columnName": "progress_step",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "goalId",
+            "columnName": "goal_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "contextsConfirmed",
+            "columnName": "contexts_confirmed",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "contextsRequireConfirmation",
+            "columnName": "contexts_require_confirmation",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "contextIds",
+            "columnName": "context_ids",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "templateId",
+            "columnName": "template_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "hasHealthState",
+            "columnName": "has_health_state",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "healthCapabilityId",
+            "columnName": "health_capability_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "healthCapabilityValue",
+            "columnName": "health_capability_value",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "healthProviderAvailability",
+            "columnName": "health_provider_availability",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "healthAccessOutcome",
+            "columnName": "health_access_outcome",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "healthVisibleRecords",
+            "columnName": "health_visible_records",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "healthCoverage",
+            "columnName": "health_coverage",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "healthFreshness",
+            "columnName": "health_freshness",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "healthSuitability",
+            "columnName": "health_suitability",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "manualPlanState",
+            "columnName": "manual_plan_state",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "setupDraftAttemptId",
+            "columnName": "setup_draft_attempt_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "setupDraftRevision",
+            "columnName": "setup_draft_revision",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "singleton_id"
+          ]
+        }
+      },
+      {
+        "tableName": "onboarding_protocols",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `template_id` TEXT NOT NULL, `status` TEXT NOT NULL, `active_slot` INTEGER, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "templateId",
+            "columnName": "template_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "activeSlot",
+            "columnName": "active_slot",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_onboarding_protocols_active_slot",
+            "unique": true,
+            "columnNames": [
+              "active_slot"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_onboarding_protocols_active_slot` ON `${TABLE_NAME}` (`active_slot`)"
+          }
+        ]
+      },
+      {
+        "tableName": "onboarding_protocol_configurations",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`protocol_id` TEXT NOT NULL, `version` INTEGER NOT NULL, `source_setup_draft_id` TEXT NOT NULL, `source_setup_draft_revision` INTEGER NOT NULL, PRIMARY KEY(`protocol_id`, `version`), FOREIGN KEY(`protocol_id`) REFERENCES `onboarding_protocols`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "protocolId",
+            "columnName": "protocol_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "version",
+            "columnName": "version",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceSetupDraftId",
+            "columnName": "source_setup_draft_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceSetupDraftRevision",
+            "columnName": "source_setup_draft_revision",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "protocol_id",
+            "version"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_onboarding_protocol_configurations_protocol_id",
+            "unique": false,
+            "columnNames": [
+              "protocol_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_onboarding_protocol_configurations_protocol_id` ON `${TABLE_NAME}` (`protocol_id`)"
+          },
+          {
+            "name": "index_onboarding_protocol_configurations_source_setup_draft_id_source_setup_draft_revision",
+            "unique": true,
+            "columnNames": [
+              "source_setup_draft_id",
+              "source_setup_draft_revision"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_onboarding_protocol_configurations_source_setup_draft_id_source_setup_draft_revision` ON `${TABLE_NAME}` (`source_setup_draft_id`, `source_setup_draft_revision`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "onboarding_protocols",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "protocol_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'a6e371d63bdfd8a1989e7fbb4742c322')"
+    ]
+  }
+}

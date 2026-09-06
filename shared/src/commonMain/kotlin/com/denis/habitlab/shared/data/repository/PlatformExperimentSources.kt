@@ -5,6 +5,8 @@ import com.denis.habitlab.shared.domain.interactor.ExperimentIdSource
 import com.denis.habitlab.shared.domain.interactor.CurrentLocalDateSource
 import com.denis.habitlab.shared.domain.model.RecordedAt
 import com.denis.habitlab.shared.domain.model.ExperimentId
+import com.denis.habitlab.shared.domain.model.OnboardingProtocolId
+import com.denis.habitlab.shared.domain.interactor.OnboardingProtocolIdSource
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.offsetAt
 import kotlinx.datetime.toLocalDateTime
@@ -39,6 +41,23 @@ internal class RandomDraftExperimentIdSource(
     private companion object {
         const val DRAFT_RANDOM_LENGTH = 20
         const val DRAFT_ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyz"
+    }
+}
+
+internal class RandomOnboardingProtocolIdSource(
+    private val random: Random = Random.Default,
+) : OnboardingProtocolIdSource {
+    override fun nextId(): OnboardingProtocolId = requireNotNull(
+        OnboardingProtocolId.fromPersisted(
+            "onboarding-" + buildString {
+                repeat(PROTOCOL_RANDOM_LENGTH) { append(PROTOCOL_ALPHABET[random.nextInt(PROTOCOL_ALPHABET.length)]) }
+            },
+        ),
+    )
+
+    private companion object {
+        const val PROTOCOL_RANDOM_LENGTH = 20
+        const val PROTOCOL_ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyz"
     }
 }
 
