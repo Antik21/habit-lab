@@ -27,5 +27,6 @@ For a terminal-only iOS build and the normal shared verification path, use the e
 - [Common implementation recipes](.agents/docs/09-common-cases.md)
 - [ADR policy and index](docs/adr/README.md)
 - [Product contract: первый запуск и первый эксперимент](docs/product/onboarding-first-run-scope.md)
+- [Onboarding User Flow](docs/product/onboarding-user-flow.md)
 
 For current versus planned capability status, see [libraries and licenses](.agents/docs/08-libraries-licenses.md).
