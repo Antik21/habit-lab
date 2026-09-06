@@ -13,3 +13,4 @@ dependency-policy	.agents/docs/08-libraries-licenses.md	<!-- canonical-signature
 planned-capabilities	.agents/docs/08-libraries-licenses.md	<!-- canonical-signature: planned-capabilities-v1 -->
 adr-policy	docs/adr/README.md	<!-- canonical-signature: adr-policy-v1 -->
 onboarding-first-run-scope	docs/product/onboarding-first-run-scope.md	<!-- canonical-signature: onboarding-first-run-scope-v1 -->
+onboarding-user-flow	docs/product/onboarding-user-flow.md	<!-- canonical-signature: onboarding-user-flow-v1 -->
