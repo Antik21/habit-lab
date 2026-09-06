@@ -12,3 +12,4 @@ testing-policy	.agents/docs/07-testing-verification.md	<!-- canonical-signature:
 dependency-policy	.agents/docs/08-libraries-licenses.md	<!-- canonical-signature: dependency-policy-v1 -->
 planned-capabilities	.agents/docs/08-libraries-licenses.md	<!-- canonical-signature: planned-capabilities-v1 -->
 adr-policy	docs/adr/README.md	<!-- canonical-signature: adr-policy-v1 -->
+onboarding-first-run-scope	docs/product/onboarding-first-run-scope.md	<!-- canonical-signature: onboarding-first-run-scope-v1 -->
