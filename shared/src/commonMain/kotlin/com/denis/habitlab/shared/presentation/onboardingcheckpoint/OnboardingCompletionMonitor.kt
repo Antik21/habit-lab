@@ -8,7 +8,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.take
 
 /**
  * App-owned, post-gate observation for durable SETUP completion.
@@ -26,5 +25,4 @@ class OnboardingCompletionMonitor(
         .map { resolveLaunchGate(it.snapshot) }
         .filter { it is LaunchGateDecision.Today }
         .map { NavigationEffect.OnboardingCompleted }
-        .take(1)
 }

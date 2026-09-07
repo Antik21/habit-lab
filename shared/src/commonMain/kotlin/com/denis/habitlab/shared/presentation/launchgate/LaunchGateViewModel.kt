@@ -28,6 +28,11 @@ class LaunchGateViewModel(
         }
     }
 
+    /** A route is admitted only after its platform snapshot commit succeeds; expose a retry path. */
+    fun onRoutePersistenceFailed() {
+        intent { reduce { ViewState(ContentUiModel.Failed) } }
+    }
+
     private suspend fun Syntax<ViewState, SideEffect>.observeLaunchSnapshot() {
         reduce { ViewState(ContentUiModel.Loading) }
         // A gate attempt consumes exactly one atomic Room snapshot. Invalid/failed attempts end

@@ -9,6 +9,8 @@ readonly REPOSITORY_ROOT="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
 readonly FLOW_FILE="$SCRIPT_DIR/flows/reference-screens.yaml"
 readonly CONFIG_FILE="$SCRIPT_DIR/config.yaml"
 readonly XCODE_PREFLIGHT="$SCRIPT_DIR/xcode-preflight.sh"
+readonly ANDROID_READY_ATTEMPTS=15
+readonly ANDROID_READY_RETRY_SECONDS=2
 
 usage() {
     printf 'Usage: %s android|ios <device-id> [run-id]\n' "$0" >&2
@@ -17,6 +19,67 @@ usage() {
 fail() {
     printf 'error: %s\n' "$1" >&2
     exit 2
+}
+
+wait_for_android_transport() {
+    local attempt
+    local transport_state='unavailable'
+    local qemu_state='unavailable'
+
+    for (( attempt = 1; attempt <= ANDROID_READY_ATTEMPTS; attempt += 1 )); do
+        transport_state="$(adb -s "$DEVICE_ID" get-state 2>/dev/null | tr -d '\r' || true)"
+        qemu_state='unavailable'
+        if [[ "$transport_state" == 'device' ]]; then
+            qemu_state="$(adb -s "$DEVICE_ID" shell getprop ro.kernel.qemu 2>/dev/null | tr -d '\r' || true)"
+            if [[ "$qemu_state" == '1' ]]; then
+                return 0
+            fi
+        fi
+
+        if (( attempt < ANDROID_READY_ATTEMPTS )); then
+            printf 'waiting for Android emulator %s transport (%s/%s; adb=%s; qemu=%s)\n' \
+                "$DEVICE_ID" "$attempt" "$ANDROID_READY_ATTEMPTS" \
+                "${transport_state:-unavailable}" "${qemu_state:-unavailable}" >&2
+            sleep "$ANDROID_READY_RETRY_SECONDS"
+        fi
+    done
+
+    fail "Android emulator '$DEVICE_ID' did not become ready after $ANDROID_READY_ATTEMPTS attempts (adb=${transport_state:-unavailable}; qemu=${qemu_state:-unavailable})"
+}
+
+wait_for_android_package_launch_target() {
+    local attempt
+    local transport_state='unavailable'
+    local qemu_state='unavailable'
+    local launcher_target='unavailable'
+
+    for (( attempt = 1; attempt <= ANDROID_READY_ATTEMPTS; attempt += 1 )); do
+        transport_state="$(adb -s "$DEVICE_ID" get-state 2>/dev/null | tr -d '\r' || true)"
+        qemu_state='unavailable'
+        launcher_target='unavailable'
+        if [[ "$transport_state" == 'device' ]]; then
+            qemu_state="$(adb -s "$DEVICE_ID" shell getprop ro.kernel.qemu 2>/dev/null | tr -d '\r' || true)"
+            if [[ "$qemu_state" == '1' ]]; then
+                launcher_target="$(adb -s "$DEVICE_ID" shell cmd package resolve-activity --brief \
+                    -a android.intent.action.MAIN \
+                    -c android.intent.category.LAUNCHER \
+                    "$APP_ID" 2>/dev/null | tr -d '\r' || true)"
+                if [[ "$launcher_target" == *"$APP_ID/"* ]]; then
+                    return 0
+                fi
+            fi
+        fi
+
+        if (( attempt < ANDROID_READY_ATTEMPTS )); then
+            printf 'waiting for Android package %s launch target (%s/%s; adb=%s; qemu=%s; target=%s)\n' \
+                "$APP_ID" "$attempt" "$ANDROID_READY_ATTEMPTS" \
+                "${transport_state:-unavailable}" "${qemu_state:-unavailable}" \
+                "${launcher_target:-unavailable}" >&2
+            sleep "$ANDROID_READY_RETRY_SECONDS"
+        fi
+    done
+
+    fail "Android package '$APP_ID' did not expose a launcher target after install on '$DEVICE_ID' after $ANDROID_READY_ATTEMPTS attempts (adb=${transport_state:-unavailable}; qemu=${qemu_state:-unavailable}; target=${launcher_target:-unavailable})"
 }
 
 if (( $# < 2 || $# > 3 )); then
@@ -100,15 +163,13 @@ set +e
 
     if [[ "$PLATFORM" == "android" ]]; then
         command -v adb >/dev/null 2>&1 || fail "adb is required for the Android runner"
-        adb_state="$(adb -s "$DEVICE_ID" get-state 2>/dev/null || true)"
-        [[ "$adb_state" == "device" ]] || fail "Android emulator '$DEVICE_ID' is not connected and ready"
-        [[ "$(adb -s "$DEVICE_ID" shell getprop ro.kernel.qemu 2>/dev/null | tr -d '\r')" == "1" ]] ||
-            fail "Android target '$DEVICE_ID' is not an emulator"
+        wait_for_android_transport
 
         ./gradlew :androidApp:assembleDebug
         readonly apk_path="$REPOSITORY_ROOT/androidApp/build/outputs/apk/debug/androidApp-debug.apk"
         [[ -f "$apk_path" ]] || fail "Android debug APK was not produced at $apk_path"
         adb -s "$DEVICE_ID" install -r "$apk_path"
+        wait_for_android_package_launch_target
     else
         # shellcheck source=xcode-preflight.sh
         source "$XCODE_PREFLIGHT"

@@ -4,6 +4,9 @@ import com.denis.habitlab.shared.app.AppDestination
 import com.denis.habitlab.shared.app.DeferredExternalNavigationCoordinator
 import com.denis.habitlab.shared.app.ExternalNavigationEvent
 import com.denis.habitlab.shared.app.OnboardingNavigationEffectHandler
+import com.denis.habitlab.shared.app.TodayAdmissionRetryPolicy
+import com.denis.habitlab.shared.app.admitTodayOrRollback
+import com.denis.habitlab.shared.app.retryTodayAdmission
 import com.denis.habitlab.shared.domain.interactor.ResolveLaunchGate
 import com.denis.habitlab.shared.domain.model.ActiveOnboardingProtocol
 import com.denis.habitlab.shared.domain.model.ActiveOnboardingProtocolCardinality
@@ -27,6 +30,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -46,13 +50,13 @@ class OnboardingCompletionMonitorTest {
 
         assertEquals(
             listOf(NavigationEffect.OnboardingCompleted),
-            monitor.observeCompletion().toList(),
+            monitor.observeCompletion().take(1).toList(),
         )
     }
 
     @Test
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun appOwnedMonitorDeliversCompletionAfterBackAndReplaysDeferredLinksFromToday() = runTest {
+    fun oneCompletionEmissionAutomaticallyRetriesSecondReplayAfterBackAndPreservesFullFifo() = runTest {
         val snapshotUpdates = MutableSharedFlow<LaunchGateSnapshotObservation>()
         val monitor = OnboardingCompletionMonitor(
             snapshotObserver = snapshots(snapshotUpdates),
@@ -63,18 +67,35 @@ class OnboardingCompletionMonitorTest {
         val todayRoots = mutableListOf<List<AppDestination>>()
         val replayedLinks = mutableListOf<ExternalNavigationEvent>()
         val externalNavigation = DeferredExternalNavigationCoordinator()
+        val firstDeferred = ExternalNavigationEvent(1, "habitlab://experiment/daily-movement")
+        val secondDeferred = ExternalNavigationEvent(2, "habitlab://experiment/sleep-routine")
+        var secondReplayFailures = 0
         val handler = OnboardingNavigationEffectHandler(
             isOriginCurrent = { destinations.lastOrNull() == it },
             onBack = { destinations.removeLast() },
             onSetupCompleted = {
-                externalNavigation.admitToday(
-                    prepareToday = {
-                        destinations.clear()
-                        destinations += AppDestination.Today
-                        todayRoots += destinations.toList()
-                    },
-                    replayDeferredEvent = { replayedLinks += it },
-                )
+                var stagedTodayRoutes = listOf<AppDestination>(AppDestination.Today)
+                retryTodayAdmission(ImmediateRetryPolicy) {
+                    externalNavigation.admitTodayOrRollback(
+                        prepareToday = {
+                            stagedTodayRoutes = listOf(AppDestination.Today)
+                        },
+                        rollback = {
+                            stagedTodayRoutes = listOf(AppDestination.Today)
+                        },
+                        replayDeferredEvent = { event ->
+                            replayedLinks += event
+                            if (event == secondDeferred && secondReplayFailures++ == 0) {
+                                error("controlled second replay failure")
+                            }
+                        },
+                        commitToday = {
+                            destinations.clear()
+                            destinations += stagedTodayRoutes
+                            todayRoots += destinations.toList()
+                        },
+                    )
+                }
             },
         )
         val completionDelivery = backgroundScope.launch {
@@ -84,8 +105,6 @@ class OnboardingCompletionMonitorTest {
 
         handler.handle(setup, NavigationEffect.Back)
         assertEquals(listOf<AppDestination>(AppDestination.Welcome), destinations)
-        val firstDeferred = ExternalNavigationEvent(1, "habitlab://experiment/daily-movement")
-        val secondDeferred = ExternalNavigationEvent(2, "habitlab://experiment/sleep-routine")
         externalNavigation.deferOrProcess(firstDeferred) { replayedLinks += it }
         externalNavigation.deferOrProcess(secondDeferred) { replayedLinks += it }
 
@@ -97,7 +116,10 @@ class OnboardingCompletionMonitorTest {
             todayRoots,
         )
         assertEquals(listOf<AppDestination>(AppDestination.Today), destinations)
-        assertEquals(listOf(firstDeferred, secondDeferred), replayedLinks)
+        assertEquals(
+            listOf(firstDeferred, secondDeferred, firstDeferred, secondDeferred),
+            replayedLinks,
+        )
         completionDelivery.cancel()
     }
 
@@ -147,4 +169,10 @@ class OnboardingCompletionMonitorTest {
         attemptId = requireNotNull(OnboardingAttemptId.fromPersisted("completion-attempt")),
         revision = 1,
     )
+
+    private object ImmediateRetryPolicy : TodayAdmissionRetryPolicy {
+        override val maximumAttempts: Int = 2
+
+        override suspend fun awaitRetryAfterFailure(failedAttempt: Int) = Unit
+    }
 }

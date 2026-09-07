@@ -6,6 +6,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import java.util.concurrent.Executors
 import kotlin.coroutines.resume
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.suspendCancellableCoroutine
 
 @Composable
@@ -21,20 +22,43 @@ private class AndroidNavigationRouteSnapshotStore(
 
     override fun read(): String? = preferences.getString(SNAPSHOT_KEY, null)
 
+    /** Ordinary navigation keeps its visible mutation even if this opportunistic write fails. */
+    override suspend fun write(encodedSnapshot: String) {
+        commitBestEffortOnSnapshotExecutor {
+            preferences.edit().putString(SNAPSHOT_KEY, encodedSnapshot).commit()
+        }
+    }
+
+    /** Ordinary navigation keeps its visible mutation even if this opportunistic clear fails. */
+    override suspend fun clear() {
+        commitBestEffortOnSnapshotExecutor {
+            preferences.edit().remove(SNAPSHOT_KEY).commit()
+        }
+    }
+
     /**
      * SharedPreferences.apply() can leave a process-killed app with the preceding valid stack. A
-     * single background executor serializes commit writes and this suspend call resumes only after
-     * commit (and best-effort invalidation on failure) completes; no disk operation runs on UI.
+     * single background executor serializes durable admission writes and this call resumes only
+     * after commit (and best-effort invalidation on failure) completes; no disk operation runs on
+     * UI. A failed commit is reported so LaunchGate never admits a route as durable.
      */
-    override suspend fun write(encodedSnapshot: String) {
+    override suspend fun writeDurably(encodedSnapshot: String) {
         commitOnSnapshotExecutor {
             preferences.edit().putString(SNAPSHOT_KEY, encodedSnapshot).commit()
         }
     }
 
-    override suspend fun clear() {
+    override suspend fun clearDurably() {
         commitOnSnapshotExecutor {
             preferences.edit().remove(SNAPSHOT_KEY).commit()
+        }
+    }
+
+    private suspend fun commitBestEffortOnSnapshotExecutor(commit: () -> Boolean) {
+        try {
+            commitOnSnapshotExecutor(commit)
+        } catch (error: Throwable) {
+            if (error is CancellationException) throw error
         }
     }
 
@@ -42,21 +66,22 @@ private class AndroidNavigationRouteSnapshotStore(
         suspendCancellableCoroutine { continuation ->
             val submitted = runCatching {
                 snapshotWriteExecutor.execute {
-                    val committed = runCatching(commit).getOrDefault(false)
-                    if (!committed) {
+                    val failure = runCatching {
+                        check(commit()) { "Navigation snapshot commit returned false" }
+                    }.exceptionOrNull()
+                    if (failure != null) {
                         // A failed replacement can leave an older but syntactically valid route.
-                        // Remove it on the same serial executor before reporting this operation done.
+                        // Remove it on the same serial executor before reporting the failure.
                         runCatching { preferences.edit().remove(SNAPSHOT_KEY).commit() }
                     }
                     if (continuation.isActive) {
-                        continuation.resume(Unit)
+                        if (failure == null) continuation.resume(Unit) else continuation.resumeWith(Result.failure(failure))
                     }
                 }
             }
             if (submitted.isFailure && continuation.isActive) {
-                // A rejected executor cannot safely persist; avoid throwing from navigation. The
-                // next process only sees a snapshot if platform storage itself could not clear it.
-                continuation.resume(Unit)
+                // A rejected executor cannot safely persist, so admission must remain retryable.
+                continuation.resumeWith(Result.failure(requireNotNull(submitted.exceptionOrNull())))
             }
         }
     }

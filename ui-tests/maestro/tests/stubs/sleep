@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+
+printf 'sleep %s\n' "$*" >>"${STUB_OPERATION_LOG:?}"

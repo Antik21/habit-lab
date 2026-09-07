@@ -2,6 +2,7 @@ package com.denis.habitlab.shared.app
 
 import androidx.compose.runtime.Composable
 import com.denis.habitlab.shared.presentation.navigation.OnboardingStep
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -9,9 +10,17 @@ import kotlinx.serialization.json.Json
 internal interface NavigationRouteSnapshotStore {
     fun read(): String?
 
+    /** Best-effort snapshot update for ordinary post-Today navigation. */
     suspend fun write(encodedSnapshot: String)
 
+    /** Best-effort snapshot invalidation for ordinary navigation. */
     suspend fun clear()
+
+    /** Cold gate/admission callers require a confirmed durable outcome. */
+    suspend fun writeDurably(encodedSnapshot: String) = write(encodedSnapshot)
+
+    /** Cold gate/admission callers require a confirmed durable outcome. */
+    suspend fun clearDurably() = clear()
 }
 
 @Composable
@@ -49,17 +58,34 @@ internal object NavigationRouteSnapshotCodec {
         return NavigationRouteRestore(routes = root(), candidateRoutes = snapshot.routes)
     }
 
-    suspend fun persist(store: NavigationRouteSnapshotStore, routes: List<AppDestination>) {
+    suspend fun persist(
+        store: NavigationRouteSnapshotStore,
+        routes: List<AppDestination>,
+        durable: Boolean = false,
+    ) {
         if (!isValidCompleteRoute(routes)) {
-            store.clear()
+            clear(store, durable)
             return
         }
-        store.write(
-            json.encodeToString(
-                NavigationRouteSnapshot.serializer(),
-                NavigationRouteSnapshot(version = currentVersion, routes = routes),
-            ),
+        val encodedSnapshot = json.encodeToString(
+            NavigationRouteSnapshot.serializer(),
+            NavigationRouteSnapshot(version = currentVersion, routes = routes),
         )
+        if (durable) store.writeDurably(encodedSnapshot)
+        else bestEffort { store.write(encodedSnapshot) }
+    }
+
+    suspend fun clear(store: NavigationRouteSnapshotStore, durable: Boolean) {
+        if (durable) store.clearDurably()
+        else bestEffort { store.clear() }
+    }
+
+    private suspend fun bestEffort(operation: suspend () -> Unit) {
+        try {
+            operation()
+        } catch (error: Throwable) {
+            if (error is CancellationException) throw error
+        }
     }
 
     internal fun isValidCompleteRoute(routes: List<AppDestination>): Boolean {
