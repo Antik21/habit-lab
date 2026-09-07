@@ -62,6 +62,32 @@ class HabitLabDeepLinkTest {
     }
 
     @Test
+    fun externalNavigationBurstIsDeliveredFifoAndOnlyTheExactCurrentEventCanBeConsumed() = runBlocking {
+        val bridge = AppNavigationEventBridge()
+        bridge.accept("habitlab://experiment/daily-movement")
+        bridge.accept("habitlab://experiment/sleep-routine")
+        bridge.accept(null)
+
+        val delivered = bridge.externalNavigationEvents.take(3).toList()
+        assertEquals(listOf(1L, 2L, 3L), delivered.map(ExternalNavigationEvent::id))
+        assertEquals(
+            listOf(
+                "habitlab://experiment/daily-movement",
+                "habitlab://experiment/sleep-routine",
+                null,
+            ),
+            delivered.map(ExternalNavigationEvent::rawUrl),
+        )
+
+        bridge.consume(delivered.first().id)
+        assertEquals(delivered.last(), bridge.latestEvent)
+        bridge.consume(99L)
+        assertEquals(delivered.last(), bridge.latestEvent)
+        bridge.consume(delivered.last().id)
+        assertNull(bridge.latestEvent)
+    }
+
+    @Test
     fun nullUrlIsStillDeliveredAsASafeFallbackEvent() {
         val bridge = AppNavigationEventBridge()
         bridge.accept(null)

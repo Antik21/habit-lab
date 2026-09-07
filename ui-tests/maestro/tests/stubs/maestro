@@ -7,7 +7,7 @@ if [[ "$#" == 1 && "$1" == "--version" ]]; then
     exit 0
 fi
 
-printf 'developer_dir=%s maestro %s\n' "${DEVELOPER_DIR:?}" "$*" >>"${STUB_OPERATION_LOG:?}"
+printf 'developer_dir=%s maestro %s\n' "${DEVELOPER_DIR:-}" "$*" >>"${STUB_OPERATION_LOG:?}"
 
 report_file=""
 artifact_dir=""
@@ -37,3 +37,5 @@ printf '{}\n' >"$debug_dir/commands-(reference-screens).json"
 printf 'png\n' >"$artifact_dir/screenshots/01.png"
 printf 'png\n' >"$artifact_dir/screenshots/02.png"
 printf 'png\n' >"$artifact_dir/screenshots/03.png"
+
+exit "${STUB_MAESTRO_EXIT:-0}"

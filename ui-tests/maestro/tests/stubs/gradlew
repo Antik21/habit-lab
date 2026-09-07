@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+
+printf 'gradlew %s\n' "$*" >>"${STUB_OPERATION_LOG:?}"
+
+[[ "$*" == ':androidApp:assembleDebug' ]] || exit 2
+mkdir -p androidApp/build/outputs/apk/debug
+printf 'apk\n' >androidApp/build/outputs/apk/debug/androidApp-debug.apk

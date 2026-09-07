@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+
+printf 'adb %s\n' "$*" >>"${STUB_OPERATION_LOG:?}"
+
+next_state() {
+    local state
+
+    if [[ -s "${STUB_ADB_STATES_FILE:-}" ]]; then
+        state="$(sed -n '1p' "$STUB_ADB_STATES_FILE")"
+        sed -n '2,$p' "$STUB_ADB_STATES_FILE" >"$STUB_ADB_STATES_FILE.next"
+        mv "$STUB_ADB_STATES_FILE.next" "$STUB_ADB_STATES_FILE"
+        printf '%s\n' "$state"
+    else
+        printf '%s\n' "${STUB_ADB_DEFAULT_STATE:-device}"
+    fi
+}
+
+[[ "$#" -ge 3 && "$1" == '-s' ]] || exit 2
+readonly DEVICE_ID="$2"
+shift 2
+
+case "$1" in
+    get-state)
+        state="$(next_state)"
+        if [[ "$state" == 'device' ]]; then
+            printf 'device\n'
+            exit 0
+        fi
+        printf 'adb: device %s\n' "${state:-offline}" >&2
+        exit 1
+        ;;
+    install)
+        [[ "$2" == '-r' && -f "$3" ]] || exit 2
+        printf 'Success\n'
+        ;;
+    shell)
+        shift
+        if [[ "$*" == 'getprop ro.kernel.qemu' ]]; then
+            printf '%s\n' "${STUB_ADB_QEMU_STATE:-1}"
+        elif [[ "$*" == *'cmd package resolve-activity --brief'* ]]; then
+            printf '%s\n' "${STUB_ADB_LAUNCH_TARGET:-com.denis.habitlab/.android.MainActivity}"
+        else
+            exit 2
+        fi
+        ;;
+    *) exit 2 ;;
+esac

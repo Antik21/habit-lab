@@ -134,6 +134,21 @@ internal data class ActiveOnboardingProtocolSnapshot(
     val configuration: OnboardingProtocolConfigurationEntity?,
 )
 
+/**
+ * One SQL-query projection used by the cold launch gate. The anchor retains a row when the
+ * singleton state is missing so that corruption is observable instead of being treated as fresh.
+ */
+internal data class LaunchGateSnapshotRow(
+    @Embedded(prefix = "state_")
+    val state: OnboardingStateEntity?,
+    @ColumnInfo(name = "active_protocol_count")
+    val activeProtocolCount: Long,
+    @Embedded(prefix = "protocol_")
+    val protocol: OnboardingProtocolEntity?,
+    @Embedded(prefix = "configuration_")
+    val configuration: OnboardingProtocolConfigurationEntity?,
+)
+
 internal const val ONBOARDING_SINGLETON_ID = 1
 internal const val ONBOARDING_ACTIVE_STATUS = "ACTIVE"
 internal const val ONBOARDING_ACTIVE_SLOT = 1

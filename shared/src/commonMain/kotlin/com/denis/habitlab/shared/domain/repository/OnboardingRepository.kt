@@ -50,6 +50,7 @@ enum class OnboardingStorageOperation {
     OBSERVE_ONBOARDING_STATE,
     OBSERVE_ONBOARDING_CATALOG,
     OBSERVE_ACTIVE_ONBOARDING_PROTOCOL,
+    OBSERVE_LAUNCH_GATE_SNAPSHOT,
 }
 
 data class OnboardingStorageFailure(

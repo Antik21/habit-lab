@@ -1,7 +1,8 @@
 # ADR 0002: Common route-only navigation restoration
 
-- Status: Accepted
+- Status: Superseded by ADR 0005
 - Scope: Android and iOS Navigation 3 restoration
+- Superseded by: ADR 0005
 
 ## Context
 

@@ -7,6 +7,7 @@ readonly TEST_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 "$BASH" "$TEST_DIR/navigation-flows-test.sh"
 "$BASH" "$TEST_DIR/ci-maestro-contract-test.sh"
 "$BASH" "$TEST_DIR/xcode-preflight-test.sh"
+"$BASH" "$TEST_DIR/android-runner-test.sh"
 
 PYTHON_BIN="$(command -v python3 || true)"
 [[ -n "$PYTHON_BIN" ]] || {

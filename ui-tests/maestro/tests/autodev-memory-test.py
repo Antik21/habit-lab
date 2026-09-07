@@ -705,7 +705,7 @@ Verification date: 2026-09-06
         catalog_path = self.memory.root / SKILL_RELATIVE / "memory/catalog.json"
         catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
         logic = next(item for item in catalog["entries"] if item["id"] == "nav.experiment-list.logic")
-        logic.update({"kind": "nav-screen", "routeKey": "Gallery", "destination": "AppDestination.Settings"})
+        logic.update({"kind": "nav-screen", "routeKey": "Today", "destination": "AppDestination.Settings"})
         catalog_path.write_text(json.dumps(catalog), encoding="utf-8")
         result = self.memory.call("lint", expected=4)
         self.assertTrue(any("contradictory route key destination" in item for item in result["errors"]))

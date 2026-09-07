@@ -45,8 +45,77 @@ internal interface OnboardingDao {
     )
     fun observeActiveProtocol(): Flow<ActiveOnboardingProtocolSnapshot?>
 
+    /**
+     * The state, active cardinality, active protocol, and its latest configuration are read by
+     * one SQLite statement. Do not replace this with a combined pair of observer flows: a launch
+     * decision must not observe a state from one transaction and a protocol from another.
+     */
+    @Query(
+        "WITH active_protocols AS (" +
+            "SELECT * FROM onboarding_protocols " +
+            "WHERE status = '$ONBOARDING_ACTIVE_STATUS' OR active_slot = $ONBOARDING_ACTIVE_SLOT" +
+            "), active_count AS (" +
+            "SELECT COUNT(*) AS active_protocol_count FROM active_protocols" +
+            "), latest_configurations AS (" +
+            "SELECT configurations.* FROM onboarding_protocol_configurations AS configurations " +
+            "INNER JOIN (" +
+            "SELECT protocol_id, MAX(version) AS version " +
+            "FROM onboarding_protocol_configurations GROUP BY protocol_id" +
+            ") AS latest ON latest.protocol_id = configurations.protocol_id " +
+            "AND latest.version = configurations.version" +
+            ") " +
+            "SELECT " +
+            "state.singleton_id AS state_singleton_id, " +
+            "state.eligibility AS state_eligibility, " +
+            "state.progress_kind AS state_progress_kind, " +
+            "state.progress_step AS state_progress_step, " +
+            "state.goal_id AS state_goal_id, " +
+            "state.contexts_confirmed AS state_contexts_confirmed, " +
+            "state.contexts_require_confirmation AS state_contexts_require_confirmation, " +
+            "state.context_ids AS state_context_ids, " +
+            "state.template_id AS state_template_id, " +
+            "state.has_health_state AS state_has_health_state, " +
+            "state.health_capability_id AS state_health_capability_id, " +
+            "state.health_capability_value AS state_health_capability_value, " +
+            "state.health_provider_availability AS state_health_provider_availability, " +
+            "state.health_access_outcome AS state_health_access_outcome, " +
+            "state.health_visible_records AS state_health_visible_records, " +
+            "state.health_coverage AS state_health_coverage, " +
+            "state.health_freshness AS state_health_freshness, " +
+            "state.health_suitability AS state_health_suitability, " +
+            "state.manual_plan_state AS state_manual_plan_state, " +
+            "state.setup_draft_attempt_id AS state_setup_draft_attempt_id, " +
+            "state.setup_draft_revision AS state_setup_draft_revision, " +
+            "active_count.active_protocol_count AS active_protocol_count, " +
+            "protocols.id AS protocol_id, " +
+            "protocols.template_id AS protocol_template_id, " +
+            "protocols.status AS protocol_status, " +
+            "protocols.active_slot AS protocol_active_slot, " +
+            "configurations.protocol_id AS configuration_protocol_id, " +
+            "configurations.version AS configuration_version, " +
+            "configurations.source_setup_draft_id AS configuration_source_setup_draft_id, " +
+            "configurations.source_setup_draft_revision AS configuration_source_setup_draft_revision " +
+            "FROM (SELECT 1 AS anchor) " +
+            "LEFT JOIN onboarding_state AS state ON state.singleton_id = $ONBOARDING_SINGLETON_ID " +
+            "CROSS JOIN active_count " +
+            "LEFT JOIN active_protocols AS protocols ON 1 = 1 " +
+            "LEFT JOIN latest_configurations AS configurations ON configurations.protocol_id = protocols.id",
+    )
+    fun observeLaunchGateSnapshotRows(): Flow<List<LaunchGateSnapshotRow>>
+
     @Query("SELECT * FROM onboarding_protocols WHERE active_slot = $ONBOARDING_ACTIVE_SLOT LIMIT 1")
     suspend fun activeProtocol(): OnboardingProtocolEntity?
+
+    /**
+     * Every row claiming activity participates in corruption and create guards. A valid active
+     * protocol must have both ACTIVE status and the active slot; either claim alone is corrupt.
+     */
+    @Query(
+        "SELECT * FROM onboarding_protocols " +
+            "WHERE status = '$ONBOARDING_ACTIVE_STATUS' OR active_slot = $ONBOARDING_ACTIVE_SLOT " +
+            "ORDER BY id ASC",
+    )
+    suspend fun activeClaimingProtocols(): List<OnboardingProtocolEntity>
 
     @Query("SELECT * FROM onboarding_protocols WHERE id = :protocolId LIMIT 1")
     suspend fun protocol(protocolId: String): OnboardingProtocolEntity?
@@ -250,16 +319,18 @@ internal interface OnboardingDao {
         protocolId: String,
         sourceDraft: PersistedSetupDraftReference,
     ): InitialProtocolInsert {
-        val existingActive = activeProtocol()
-        if (existingActive != null) {
+        val existingActive = activeClaimingProtocols()
+        if (existingActive.isNotEmpty()) {
+            val soleActive = existingActive.singleOrNull()
             val current = state()
-            val latest = latestConfiguration(existingActive.id)
+            val latest = if (soleActive == null) null else latestConfiguration(soleActive.id)
             if (
-                current != null && existingActive.status == ONBOARDING_ACTIVE_STATUS &&
-                existingActive.templateId == current.templateId && current.isCompleted() &&
+                current != null && soleActive != null && soleActive.status == ONBOARDING_ACTIVE_STATUS &&
+                soleActive.activeSlot == ONBOARDING_ACTIVE_SLOT &&
+                soleActive.templateId == current.templateId && current.isCompleted() &&
                 current.matches(sourceDraft) && latest?.matches(sourceDraft) == true
             ) {
-                return InitialProtocolInsert.Unchanged(existingActive, latest)
+                return InitialProtocolInsert.Unchanged(soleActive, latest)
             }
             return InitialProtocolInsert.ActiveAlreadyExists
         }
@@ -308,8 +379,9 @@ internal interface OnboardingDao {
         sourceDraft: PersistedSetupDraftReference,
     ): AppendConfigurationInsert {
         val protocol = protocol(protocolId) ?: return AppendConfigurationInsert.MissingProtocol
+        val allActive = activeClaimingProtocols()
         if (protocol.status != ONBOARDING_ACTIVE_STATUS || protocol.activeSlot != ONBOARDING_ACTIVE_SLOT ||
-            activeProtocol()?.id != protocolId
+            allActive.singleOrNull()?.id != protocolId
         ) {
             return AppendConfigurationInsert.Rejected(OnboardingPrecondition.ACTIVE_PROTOCOL)
         }

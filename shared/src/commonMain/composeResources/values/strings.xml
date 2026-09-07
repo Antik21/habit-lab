@@ -1,5 +1,16 @@
 <resources>
     <string name="app_name">Habit Lab</string>
+    <string name="launch_gate_invalid_message">Your saved onboarding data needs attention.</string>
+    <string name="launch_gate_failed_message">Could not read saved onboarding data.</string>
+    <string name="launch_gate_retry">Retry</string>
+    <string name="onboarding_checkpoint_welcome">Welcome</string>
+    <string name="onboarding_checkpoint_outcome">Choose your outcome</string>
+    <string name="onboarding_checkpoint_context">Your context</string>
+    <string name="onboarding_checkpoint_protocols">Recommended protocols</string>
+    <string name="onboarding_checkpoint_health_explanation">Health data</string>
+    <string name="onboarding_checkpoint_status_coverage">Status and coverage</string>
+    <string name="onboarding_checkpoint_setup">Set up your experiment</string>
+    <string name="onboarding_checkpoint_back">Back</string>
     <string name="gallery_title">%1$s component gallery</string>
     <string name="gallery_intro">Shared Material 3 foundation for Android and iOS.</string>
     <string name="gallery_back_action_label">‹</string>

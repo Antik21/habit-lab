@@ -19,6 +19,9 @@ internal class RoomOnboardingLocalDataSource(database: HabitLabDatabase) {
 
     fun observeActiveProtocol(): Flow<ActiveOnboardingProtocolSnapshot?> = dao.observeActiveProtocol()
 
+    fun observeLaunchGateSnapshotRows(): Flow<List<LaunchGateSnapshotRow>> =
+        dao.observeLaunchGateSnapshotRows()
+
     suspend fun confirmEligibility(): OnboardingStateWrite = dao.confirmEligibility()
 
     suspend fun revokeEligibility(): OnboardingStateWrite = dao.revokeEligibility()

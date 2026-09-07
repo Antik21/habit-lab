@@ -6,6 +6,9 @@ import kotlin.time.Instant
 internal data class DebugSeed(
     val experiments: List<ExperimentEntity>,
     val checkIns: List<CheckInEntity>,
+    val onboardingState: OnboardingStateEntity,
+    val activeOnboardingProtocol: OnboardingProtocolEntity,
+    val activeOnboardingConfiguration: OnboardingProtocolConfigurationEntity,
 ) {
     companion object {
         val fixed: DebugSeed by lazy {
@@ -57,6 +60,41 @@ internal data class DebugSeed(
                         recordedOffsetSeconds = 0,
                         recordedLocalDate = "2026-01-02",
                     ),
+                ),
+                onboardingState = OnboardingStateEntity(
+                    singletonId = ONBOARDING_SINGLETON_ID,
+                    eligibility = ELIGIBILITY_CONFIRMED,
+                    progressKind = PROGRESS_COMPLETED,
+                    progressStep = null,
+                    goalId = "daily-movement",
+                    contextsConfirmed = true,
+                    contextsRequireConfirmation = false,
+                    contextIds = "low-evening-movement",
+                    templateId = "after-dinner-walk",
+                    hasHealthState = true,
+                    healthCapabilityId = "health-record-read",
+                    healthCapabilityValue = "AVAILABLE",
+                    healthProviderAvailability = "AVAILABLE",
+                    healthAccessOutcome = "FULL_ACCESS",
+                    healthVisibleRecords = "RECORDS_VISIBLE",
+                    healthCoverage = "NOT_ASSESSED",
+                    healthFreshness = "NOT_ASSESSED",
+                    healthSuitability = "UNDETERMINED",
+                    manualPlanState = "EXPLICITLY_SELECTED",
+                    setupDraftAttemptId = "debug-onboarding-attempt",
+                    setupDraftRevision = 1,
+                ),
+                activeOnboardingProtocol = OnboardingProtocolEntity(
+                    id = "debug-onboarding-protocol",
+                    templateId = "after-dinner-walk",
+                    status = ONBOARDING_ACTIVE_STATUS,
+                    activeSlot = ONBOARDING_ACTIVE_SLOT,
+                ),
+                activeOnboardingConfiguration = OnboardingProtocolConfigurationEntity(
+                    protocolId = "debug-onboarding-protocol",
+                    version = 1,
+                    sourceSetupDraftId = "debug-onboarding-attempt",
+                    sourceSetupDraftRevision = 1,
                 ),
             )
         }
