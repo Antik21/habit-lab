@@ -81,7 +81,7 @@ readonly RECOVERY_ARTIFACTS="$CASE_REPOSITORY/build/maestro/recovery-success/and
     fail_test 'runner did not use bounded transport backoff'
 grep -F 'adb -s emulator-5554 shell cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER com.denis.habitlab' \
     "$CASE_OPERATIONS" >/dev/null || fail_test 'runner did not resolve the installed launcher activity'
-grep -F 'maestro test --platform android --udid emulator-5554' "$CASE_OPERATIONS" >/dev/null ||
+[[ "$(count_lines 'maestro test --platform android --udid emulator-5554' "$CASE_OPERATIONS")" == 1 ]] ||
     fail_test 'runner did not invoke Maestro after Android transport recovery'
 
 create_case permanent-offline
