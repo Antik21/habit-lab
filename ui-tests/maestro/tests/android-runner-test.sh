@@ -71,7 +71,7 @@ run_android() {
 
 create_case transport-recovery
 printf 'device\noffline\noffline\ndevice\n' >"$CASE_STATES"
-run_android recovery-success
+run_android recovery-success DEVELOPER_DIR=/Applications/Xcode_26.4.1.app/Contents/Developer
 readonly RECOVERY_ARTIFACTS="$CASE_REPOSITORY/build/maestro/recovery-success/android"
 [[ -s "$RECOVERY_ARTIFACTS/report.xml" ]] || fail_test 'recovered Android runner did not produce JUnit evidence'
 [[ -s "$RECOVERY_ARTIFACTS/debug/maestro.log" ]] || fail_test 'recovered Android runner did not produce debug evidence'
@@ -81,7 +81,7 @@ readonly RECOVERY_ARTIFACTS="$CASE_REPOSITORY/build/maestro/recovery-success/and
     fail_test 'runner did not use bounded transport backoff'
 grep -F 'adb -s emulator-5554 shell cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER com.denis.habitlab' \
     "$CASE_OPERATIONS" >/dev/null || fail_test 'runner did not resolve the installed launcher activity'
-grep -F 'developer_dir= maestro test --platform android --udid emulator-5554' "$CASE_OPERATIONS" >/dev/null ||
+grep -F 'maestro test --platform android --udid emulator-5554' "$CASE_OPERATIONS" >/dev/null ||
     fail_test 'runner did not invoke Maestro after Android transport recovery'
 
 create_case permanent-offline
@@ -91,7 +91,7 @@ if permanent_offline_output="$(run_android permanent-offline STUB_ADB_DEFAULT_ST
 fi
 [[ "$permanent_offline_output" == *"did not expose a launcher target after install"* ]] ||
     fail_test 'permanent offline transport did not produce a launcher-readiness failure'
-[[ "$(count_lines 'developer_dir= maestro test' "$CASE_OPERATIONS")" == 0 ]] ||
+[[ "$(count_lines 'maestro test' "$CASE_OPERATIONS")" == 0 ]] ||
     fail_test 'runner invoked Maestro when Android transport could not recover'
 
 create_case missing-launch-target
@@ -101,7 +101,7 @@ if missing_target_output="$(run_android missing-target STUB_ADB_LAUNCH_TARGET=ot
 fi
 [[ "$missing_target_output" == *"did not expose a launcher target after install"* ]] ||
     fail_test 'missing Android launcher target did not fail closed'
-[[ "$(count_lines 'developer_dir= maestro test' "$CASE_OPERATIONS")" == 0 ]] ||
+[[ "$(count_lines 'maestro test' "$CASE_OPERATIONS")" == 0 ]] ||
     fail_test 'runner invoked Maestro without a resolved Android launcher target'
 
 create_case maestro-failure
@@ -109,7 +109,7 @@ printf 'device\n' >"$CASE_STATES"
 if maestro_failure_output="$(run_android maestro-failure STUB_MAESTRO_EXIT=73 2>&1)"; then
     fail_test 'runner accepted a failing Maestro flow'
 fi
-[[ "$(count_lines 'developer_dir= maestro test --platform android --udid emulator-5554' "$CASE_OPERATIONS")" == 1 ]] ||
+[[ "$(count_lines 'maestro test --platform android --udid emulator-5554' "$CASE_OPERATIONS")" == 1 ]] ||
     fail_test 'runner retried a failing Maestro flow instead of preserving the app failure'
 [[ "$maestro_failure_output" != *'waiting for Android package'* ]] ||
     fail_test 'runner retried transport after Maestro had started'
