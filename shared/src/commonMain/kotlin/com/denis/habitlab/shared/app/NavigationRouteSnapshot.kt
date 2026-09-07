@@ -1,6 +1,7 @@
 package com.denis.habitlab.shared.app
 
 import androidx.compose.runtime.Composable
+import com.denis.habitlab.shared.presentation.navigation.OnboardingStep
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -24,10 +25,10 @@ private data class NavigationRouteSnapshot(
 
 /**
  * Explicitly versioned route-only persistence. Invalid, obsolete, malformed, or structurally
- * impossible data is discarded before Nav3 receives it, leaving a known Gallery root instead.
+ * impossible data is discarded before Nav3 receives it, leaving an in-memory LaunchGate root.
  */
 internal object NavigationRouteSnapshotCodec {
-    private const val currentVersion = 2
+    private const val currentVersion = 3
     private const val maxRouteCount = 12
     private val json = Json {
         encodeDefaults = true
@@ -40,14 +41,16 @@ internal object NavigationRouteSnapshotCodec {
         val snapshot = runCatching {
             json.decodeFromString(NavigationRouteSnapshot.serializer(), encodedSnapshot)
         }.getOrNull()
-        if (snapshot == null || snapshot.version != currentVersion || !isValid(snapshot.routes)) {
+        if (snapshot == null || snapshot.version != currentVersion || !isValidCompleteRoute(snapshot.routes)) {
             return NavigationRouteRestore(routes = root(), shouldClearStoredSnapshot = true)
         }
-        return NavigationRouteRestore(routes = snapshot.routes)
+        // A valid stored stack is only a candidate. Cold launch always starts from LaunchGate and
+        // admits this candidate later, after durable onboarding eligibility has been resolved.
+        return NavigationRouteRestore(routes = root(), candidateRoutes = snapshot.routes)
     }
 
     suspend fun persist(store: NavigationRouteSnapshotStore, routes: List<AppDestination>) {
-        if (!isValid(routes)) {
+        if (!isValidCompleteRoute(routes)) {
             store.clear()
             return
         }
@@ -59,8 +62,8 @@ internal object NavigationRouteSnapshotCodec {
         )
     }
 
-    private fun isValid(routes: List<AppDestination>): Boolean {
-        if (routes.size !in 1..maxRouteCount || routes.firstOrNull() != AppDestination.Gallery) {
+    internal fun isValidCompleteRoute(routes: List<AppDestination>): Boolean {
+        if (routes.size !in 1..maxRouteCount || routes.firstOrNull() !in setOf(AppDestination.Welcome, AppDestination.Today)) {
             return false
         }
         var previous = routes.first()
@@ -72,31 +75,38 @@ internal object NavigationRouteSnapshotCodec {
     }
 
     private fun canFollow(previous: AppDestination, destination: AppDestination): Boolean = when (destination) {
-        AppDestination.Gallery -> false
+        AppDestination.LaunchGate, AppDestination.Welcome, AppDestination.Today -> false
+        is AppDestination.OnboardingCheckpoint -> when (previous) {
+            AppDestination.Welcome -> destination.step == OnboardingStep.OUTCOME
+            is AppDestination.OnboardingCheckpoint -> destination.step.ordinal == previous.step.ordinal + 1 &&
+                destination.step != OnboardingStep.WELCOME
+            else -> false
+        }
         is AppDestination.Experiment -> {
-            previous == AppDestination.Gallery &&
+            previous == AppDestination.Today &&
                 ExperimentId.fromInternalValue(destination.experimentId.value) != null
         }
         is AppDestination.ExperimentEditor -> when (previous) {
-            AppDestination.Gallery -> destination.experimentId == null
+            AppDestination.Today -> destination.experimentId == null
             is AppDestination.Experiment -> destination.experimentId == previous.experimentId
             else -> false
         }
         is AppDestination.DailyCheckIn -> previous is AppDestination.Experiment &&
             previous.experimentId == destination.experimentId &&
             runCatching { destination.localDate.toLocalDate() }.isSuccess
-        AppDestination.Settings -> previous == AppDestination.Gallery
+        AppDestination.Settings -> previous == AppDestination.Today
         is AppDestination.MetricPicker -> previous is AppDestination.ExperimentEditor &&
             previous.experimentId == destination.experimentId
         is AppDestination.ConfirmDelete -> previous is AppDestination.Experiment &&
             previous.experimentId == destination.experimentId
     }
 
-    private fun root(): List<AppDestination> = listOf(AppDestination.Gallery)
+    private fun root(): List<AppDestination> = listOf(AppDestination.LaunchGate)
 }
 
 /** Restore output separates safe in-memory fallback from asynchronous platform invalidation. */
 internal data class NavigationRouteRestore(
     val routes: List<AppDestination>,
+    val candidateRoutes: List<AppDestination>? = null,
     val shouldClearStoredSnapshot: Boolean = false,
 )

@@ -1,6 +1,7 @@
 package com.denis.habitlab.shared.domain.observer
 
 import com.denis.habitlab.shared.domain.model.ActiveOnboardingProtocol
+import com.denis.habitlab.shared.domain.model.LaunchGateSnapshot
 import com.denis.habitlab.shared.domain.model.OnboardingCatalog
 import com.denis.habitlab.shared.domain.model.OnboardingState
 import com.denis.habitlab.shared.domain.repository.OnboardingStorageFailure
@@ -38,6 +39,20 @@ sealed interface OnboardingCatalogObservation {
 
 interface ActiveOnboardingProtocolObserver {
     fun observeActiveProtocol(): Flow<ActiveOnboardingProtocolObservation>
+}
+
+/** A single coherent storage observation for cold-launch routing; do not combine the two legacy flows. */
+interface LaunchGateSnapshotObserver {
+    fun observeLaunchSnapshot(): Flow<LaunchGateSnapshotObservation>
+}
+
+sealed interface LaunchGateSnapshotObservation {
+    data class Available(val snapshot: LaunchGateSnapshot) : LaunchGateSnapshotObservation
+
+    /** Missing, malformed, or impossible cardinality stays blocking rather than becoming fresh. */
+    data class Invalid(val invalidity: InvalidOnboardingPersistence) : LaunchGateSnapshotObservation
+
+    data class Failed(val failure: OnboardingStorageFailure) : LaunchGateSnapshotObservation
 }
 
 sealed interface ActiveOnboardingProtocolObservation {

@@ -5,15 +5,16 @@ import com.denis.habitlab.shared.domain.repository.StorageOperation
 import kotlinx.coroutines.CancellationException
 
 /**
- * Created only by debug host bootstrap. This is deliberately not registered in a release graph,
- * so production code has no destructive database operation to invoke.
+ * Created only by debug host bootstrap. The automation fixture source writes experiments and the
+ * completed onboarding proof in one Room transaction; this control is absent from release graphs.
  */
 class DebugExperimentDatabaseControl internal constructor(
     private val localDataSource: RoomExperimentLocalDataSource,
+    private val automationFixtureDataSource: DebugAutomationFixtureLocalDataSource? = null,
     private val onSuccessfulReset: () -> Unit = {},
 ) {
     suspend fun resetAndSeed(): DebugDatabaseResetResult = try {
-        localDataSource.resetAndSeed()
+        automationFixtureDataSource?.resetAndSeed() ?: localDataSource.resetAndSeed()
         onSuccessfulReset()
         DebugDatabaseResetResult.Reset
     } catch (cancellation: CancellationException) {
@@ -23,7 +24,8 @@ class DebugExperimentDatabaseControl internal constructor(
     }
 
     internal suspend fun seedIfEmpty(): DebugDatabaseSeedResult = try {
-        if (localDataSource.seedIfEmpty()) DebugDatabaseSeedResult.Seeded else DebugDatabaseSeedResult.ExistingData
+        val seeded = automationFixtureDataSource?.seedIfNoExperiments() ?: localDataSource.seedIfEmpty()
+        if (seeded) DebugDatabaseSeedResult.Seeded else DebugDatabaseSeedResult.ExistingData
     } catch (cancellation: CancellationException) {
         throw cancellation
     } catch (_: Exception) {

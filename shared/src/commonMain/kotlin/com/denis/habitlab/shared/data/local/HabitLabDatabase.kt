@@ -24,6 +24,8 @@ abstract class HabitLabDatabase : RoomDatabase() {
     internal abstract fun experimentDao(): ExperimentDao
 
     internal abstract fun onboardingDao(): OnboardingDao
+
+    internal abstract fun debugAutomationFixtureDao(): DebugAutomationFixtureDao
 }
 
 @Suppress("KotlinNoActualForExpect")

@@ -10,11 +10,9 @@ import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDe
 import androidx.navigation3.runtime.NavBackStack
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
-import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.scene.DialogSceneStrategy
 import androidx.navigation3.scene.SinglePaneSceneStrategy
 import androidx.navigation3.ui.NavDisplay
-import androidx.savedstate.serialization.SavedStateConfiguration
 import com.denis.habitlab.shared.presentation.confirmdelete.ConfirmDeleteScreen
 import com.denis.habitlab.shared.presentation.confirmdelete.ConfirmDeleteViewModel
 import com.denis.habitlab.shared.presentation.dailycheckin.DailyCheckInScreen
@@ -27,9 +25,15 @@ import com.denis.habitlab.shared.presentation.experimentlist.ExperimentListScree
 import com.denis.habitlab.shared.presentation.experimentlist.ExperimentListViewModel
 import com.denis.habitlab.shared.presentation.metricpicker.MetricPickerScreen
 import com.denis.habitlab.shared.presentation.metricpicker.MetricPickerViewModel
+import com.denis.habitlab.shared.presentation.launchgate.LaunchGateScreen
+import com.denis.habitlab.shared.presentation.launchgate.LaunchGateViewModel
+import com.denis.habitlab.shared.presentation.launchgate.LaunchGateDecision
+import com.denis.habitlab.shared.presentation.onboardingcheckpoint.OnboardingCheckpointScreen
+import com.denis.habitlab.shared.presentation.onboardingcheckpoint.OnboardingCheckpointViewModel
 import com.denis.habitlab.shared.presentation.navigation.DeleteDialogResult
 import com.denis.habitlab.shared.presentation.navigation.ExperimentEditorEntryArguments
 import com.denis.habitlab.shared.presentation.navigation.MetricPickerEntryArguments
+import com.denis.habitlab.shared.presentation.navigation.OnboardingStep
 import com.denis.habitlab.shared.presentation.navigation.ExperimentDialogResult as LegacyExperimentDialogResult
 import com.denis.habitlab.shared.presentation.navigation.experiment.NavigationDialogResultDisplay
 import com.denis.habitlab.shared.presentation.navigation.MetricPickerResult
@@ -40,12 +44,11 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.LocalDate
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.modules.SerializersModule
-import kotlinx.serialization.modules.polymorphic
-import kotlinx.serialization.modules.subclass
 
 /** Common owner of the one Nav3 stack for both platforms and every typed dialog result. */
 @Composable
@@ -55,13 +58,16 @@ internal fun Navigation3AppHost(
 ) {
     val snapshotStore = rememberNavigationRouteSnapshotStore()
     val restored = remember(snapshotStore) { NavigationRouteSnapshotCodec.restore(snapshotStore.read()) }
-    val backStack = rememberNavBackStack(navigationSavedStateConfiguration, *restored.routes.toTypedArray())
+    // Do not use rememberNavBackStack: its saveable restoration could bypass this cold LaunchGate.
+    // The v3 custom snapshot remains only a post-decision candidate.
+    val backStack = remember { NavBackStack<NavKey>(*restored.routes.toTypedArray()) }
     var pendingResult by remember { mutableStateOf<DialogResultDelivery?>(null) }
     var confirmDeleteDismissalLock by remember { mutableStateOf(ConfirmDeleteDismissalLock.UNLOCKED) }
-    val navigator = remember(backStack, snapshotStore) {
+    val navigator = remember(backStack, snapshotStore, restored.shouldClearStoredSnapshot) {
         AppNavigator(
             backStack = backStack,
             snapshotStore = snapshotStore,
+            initialSnapshotCleanupPending = restored.shouldClearStoredSnapshot,
             onDialogResult = { pendingResult = it },
             confirmDeleteDismissalLock = { confirmDeleteDismissalLock },
             onNavigationStarted = {
@@ -70,14 +76,9 @@ internal fun Navigation3AppHost(
             },
         )
     }
-    val navigationEvent = navigationEvents.latestEvent
-
-    LaunchedEffect(restored.shouldClearStoredSnapshot, snapshotStore) {
-        if (restored.shouldClearStoredSnapshot) snapshotStore.clear()
-    }
-    LaunchedEffect(navigationEvent?.id) {
-        navigationEvent?.let { event ->
-            navigator.handleExternalNavigation(event)
+    LaunchedEffect(navigationEvents, navigator) {
+        navigationEvents.externalNavigationEvents.collect { event ->
+            navigator.deferExternalNavigation(event)
             navigationEvents.consume(event.id)
         }
     }
@@ -89,9 +90,44 @@ internal fun Navigation3AppHost(
         androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator<NavKey>(),
         rememberViewModelStoreNavEntryDecorator<NavKey>(),
     )
-    val entries = remember(appTitle, navigator, pendingResult) {
+    val entries = remember(appTitle, navigator, pendingResult, restored.candidateRoutes) {
         entryProvider<NavKey> {
-            entry<AppDestination.Gallery> {
+            entry<AppDestination.LaunchGate> {
+                val viewModel: LaunchGateViewModel = navigationEntryViewModel(key = "launch-gate")
+                LaunchGateScreen(
+                    viewModel = viewModel,
+                    handleNavigationAction = { effect: com.denis.habitlab.shared.presentation.launchgate.NavigationEffect ->
+                        when (effect) {
+                            is com.denis.habitlab.shared.presentation.launchgate.NavigationEffect.Resolve ->
+                                navigator.handleLaunchGateEffect(effect.decision, restored.candidateRoutes)
+                            com.denis.habitlab.shared.presentation.launchgate.NavigationEffect.ClearObsoleteSnapshot ->
+                                navigator.clearObsoleteSnapshotAfterBlockedLaunch()
+                        }
+                    },
+                )
+            }
+            // Neutral entry contours only. DEN-26/25/27/29/30/31/28 replace these one by one.
+            entry<AppDestination.Welcome> {
+                val viewModel: OnboardingCheckpointViewModel = navigationEntryViewModel(
+                    key = "onboarding:${OnboardingStep.WELCOME}", OnboardingStep.WELCOME,
+                )
+                OnboardingCheckpointScreen(
+                    viewModel = viewModel,
+                    isNavigationActionAllowed = rememberIsNavigationActionAllowed(),
+                    handleNavigationAction = { navigator.handleOnboardingEffect(AppDestination.Welcome, it) },
+                )
+            }
+            entry<AppDestination.OnboardingCheckpoint> { route ->
+                val viewModel: OnboardingCheckpointViewModel = navigationEntryViewModel(
+                    key = "onboarding:${route.step}", route.step,
+                )
+                OnboardingCheckpointScreen(
+                    viewModel = viewModel,
+                    isNavigationActionAllowed = rememberIsNavigationActionAllowed(),
+                    handleNavigationAction = { navigator.handleOnboardingEffect(route, it) },
+                )
+            }
+            entry<AppDestination.Today> {
                 val viewModel: ExperimentListViewModel = navigationEntryViewModel(key = "experiment-list")
                 ExperimentListScreen(
                     viewModel = viewModel,
@@ -193,10 +229,13 @@ internal fun Navigation3AppHost(
     )
 }
 
-/** Complete typed route set. Gallery is retained as the stable, safe root wire key. */
+/** Complete typed route set. LaunchGate is only an in-memory cold root and is never snapshotted. */
 @Serializable
 sealed interface AppDestination : NavKey {
-    @Serializable data object Gallery : AppDestination
+    @Serializable data object LaunchGate : AppDestination
+    @Serializable data object Welcome : AppDestination
+    @Serializable data class OnboardingCheckpoint(val step: OnboardingStep) : AppDestination
+    @Serializable data object Today : AppDestination
     @Serializable data class Experiment(val experimentId: ExperimentId) : AppDestination
     @Serializable data class ExperimentEditor(val experimentId: ExperimentId?) : AppDestination
     @Serializable data class DailyCheckIn(val experimentId: ExperimentId, val localDate: CheckInRouteDate) : AppDestination
@@ -218,10 +257,18 @@ data class CheckInRouteDate(val value: String) {
 class AppNavigationEventBridge {
     private var nextEventId = 0L
     private var latest by mutableStateOf<ExternalNavigationEvent?>(null)
+    private val externalNavigationChannel = Channel<ExternalNavigationEvent>(Channel.UNLIMITED)
     private val backChannel = Channel<Unit>(Channel.UNLIMITED)
+    /** FIFO custody for every native URL delivery; collection is deliberately sequential. */
+    val externalNavigationEvents: Flow<ExternalNavigationEvent> = externalNavigationChannel.receiveAsFlow()
     val latestEvent: ExternalNavigationEvent? get() = latest
     val backRequests: Flow<Unit> = backChannel.receiveAsFlow()
-    fun accept(rawUrl: String?) { nextEventId += 1; latest = ExternalNavigationEvent(nextEventId, rawUrl) }
+    fun accept(rawUrl: String?) {
+        nextEventId += 1
+        val event = ExternalNavigationEvent(nextEventId, rawUrl)
+        latest = event
+        check(externalNavigationChannel.trySend(event).isSuccess) { "External navigation channel is unavailable" }
+    }
     fun consume(eventId: Long) { if (latest?.id == eventId) latest = null }
     fun requestBack() { check(backChannel.trySend(Unit).isSuccess) { "Back request channel is unavailable" } }
 }
@@ -265,14 +312,21 @@ private data class DialogResultDelivery(val id: Long, val caller: AppDestination
 private class AppNavigator(
     private val backStack: NavBackStack<NavKey>,
     private val snapshotStore: NavigationRouteSnapshotStore,
+    initialSnapshotCleanupPending: Boolean,
     private val onDialogResult: (DialogResultDelivery) -> Unit,
     private val confirmDeleteDismissalLock: () -> ConfirmDeleteDismissalLock,
     private val onNavigationStarted: () -> Unit,
 ) {
     private var nextResultId = 0L
+    private var launchResolved = false
+    private var todayEligible = false
+    private var canonicalRoot: AppDestination = AppDestination.LaunchGate
+    private var initialSnapshotCleanupPending = initialSnapshotCleanupPending
+    private val deferredExternalNavigation = mutableListOf<ExternalNavigationEvent>()
+    private val snapshotPersistenceMutex = Mutex()
 
     suspend fun handleListEffect(effect: com.denis.habitlab.shared.presentation.experimentlist.NavigationEffect) {
-        if (backStack.lastOrNull() != AppDestination.Gallery) return
+        if (backStack.lastOrNull() != AppDestination.Today) return
         when (effect) {
             is com.denis.habitlab.shared.presentation.experimentlist.NavigationEffect.OpenDetails -> openDetails(effect.experimentId)
             com.denis.habitlab.shared.presentation.experimentlist.NavigationEffect.OpenCreateEditor -> add(AppDestination.ExperimentEditor(null))
@@ -339,6 +393,50 @@ private class AppNavigator(
         if (backStack.lastOrNull() == AppDestination.Settings && effect == com.denis.habitlab.shared.presentation.settings.NavigationEffect.Back) onBack()
     }
 
+    suspend fun handleOnboardingEffect(
+        origin: AppDestination,
+        effect: com.denis.habitlab.shared.presentation.onboardingcheckpoint.NavigationEffect,
+    ) {
+        if (backStack.lastOrNull() == origin && effect == com.denis.habitlab.shared.presentation.onboardingcheckpoint.NavigationEffect.Back) {
+            onBack()
+        }
+    }
+
+    suspend fun handleLaunchGateEffect(
+        decision: LaunchGateDecision,
+        restoredCandidate: List<AppDestination>?,
+    ) {
+        if (backStack.lastOrNull() != AppDestination.LaunchGate || launchResolved) return
+        onNavigationStarted()
+        launchResolved = true
+        todayEligible = decision == LaunchGateDecision.Today
+        val resolvedRoutes = when (decision) {
+            LaunchGateDecision.Welcome -> listOf(AppDestination.Welcome)
+            is LaunchGateDecision.ResumeOnboarding -> onboardingRoutes(decision.checkpoint)
+            LaunchGateDecision.Today -> restoredCandidate
+                ?.takeIf { NavigationRouteSnapshotCodec.isValidCompleteRoute(it) && it.firstOrNull() == AppDestination.Today }
+                ?: listOf(AppDestination.Today)
+        }
+        canonicalRoot = resolvedRoutes.first()
+        replaceWith(resolvedRoutes)
+        persist()
+
+        val queued = deferredExternalNavigation.toList()
+        deferredExternalNavigation.clear()
+        if (todayEligible) {
+            queued.forEach { event -> handleExternalNavigationAfterGate(event) }
+        }
+    }
+
+    /**
+     * An invalid/failed durable read never resolves the gate, so it cannot reach [persist]. Keep
+     * obsolete snapshot cleanup in this same navigator owner to share the initial-clear invariant
+     * with a later successful retry instead of launching an independent composition effect.
+     */
+    suspend fun clearObsoleteSnapshotAfterBlockedLaunch() = withContext(NonCancellable) {
+        snapshotPersistenceMutex.withLock { persistInitialSnapshotCleanupIfPending() }
+    }
+
     suspend fun handleMetricPickerEffect(
         origin: AppDestination.MetricPicker,
         effect: com.denis.habitlab.shared.presentation.metricpicker.NavigationEffect,
@@ -368,8 +466,9 @@ private class AppNavigator(
                     }
                 }
             }
-            null, AppDestination.Gallery -> Unit
+            null -> Unit
             else -> {
+                if (backStack.size <= 1) return
                 onNavigationStarted()
                 backStack.removeLast()
                 persist()
@@ -377,9 +476,24 @@ private class AppNavigator(
         }
     }
 
-    suspend fun handleExternalNavigation(event: ExternalNavigationEvent) {
+    /** Native delivery is queued until the durable launch decision has completed. */
+    suspend fun deferExternalNavigation(event: ExternalNavigationEvent) {
+        if (!launchResolved) {
+            deferredExternalNavigation += event
+        } else {
+            handleExternalNavigationAfterGate(event)
+        }
+    }
+
+    private suspend fun handleExternalNavigationAfterGate(event: ExternalNavigationEvent) {
         onNavigationStarted()
-        replaceWithRoot()
+        if (!todayEligible) {
+            // Product links are never admitted while onboarding is incomplete.
+            replaceWithRoot()
+            persist()
+            return
+        }
+        replaceWith(listOf(AppDestination.Today))
         HabitLabDeepLink.parse(event.rawUrl)?.let(backStack::add)
         persist()
     }
@@ -428,25 +542,37 @@ private class AppNavigator(
         persist()
     }
 
-    private fun replaceWithRoot() { backStack.clear(); backStack += AppDestination.Gallery }
+    private fun replaceWithRoot() = replaceWith(listOf(canonicalRoot))
+
+    private fun replaceWith(routes: List<AppDestination>) {
+        backStack.clear()
+        backStack.addAll(routes)
+    }
+
+    private fun onboardingRoutes(checkpoint: OnboardingStep): List<AppDestination> {
+        if (checkpoint == OnboardingStep.WELCOME) return listOf(AppDestination.Welcome)
+        val checkpoints = OnboardingStep.entries
+            .dropWhile { it != OnboardingStep.OUTCOME }
+            .takeWhile { it != checkpoint }
+            .plus(checkpoint)
+        return listOf(AppDestination.Welcome) + checkpoints.map(AppDestination::OnboardingCheckpoint)
+    }
 
     private suspend fun persist() = withContext(NonCancellable) {
-        val routes = backStack.map { it as? AppDestination }
-        if (routes.any { it == null }) snapshotStore.clear()
-        else NavigationRouteSnapshotCodec.persist(snapshotStore, routes.filterNotNull())
+        snapshotPersistenceMutex.withLock {
+            persistInitialSnapshotCleanupIfPending()
+            val routes = backStack.map { it as? AppDestination }
+            if (routes.any { it == null }) snapshotStore.clear()
+            else NavigationRouteSnapshotCodec.persist(snapshotStore, routes.filterNotNull())
+        }
     }
-}
 
-private val navigationSavedStateConfiguration = SavedStateConfiguration {
-    serializersModule = SerializersModule {
-        polymorphic(NavKey::class) {
-            subclass(AppDestination.Gallery::class, AppDestination.Gallery.serializer())
-            subclass(AppDestination.Experiment::class, AppDestination.Experiment.serializer())
-            subclass(AppDestination.ExperimentEditor::class, AppDestination.ExperimentEditor.serializer())
-            subclass(AppDestination.DailyCheckIn::class, AppDestination.DailyCheckIn.serializer())
-            subclass(AppDestination.Settings::class, AppDestination.Settings.serializer())
-            subclass(AppDestination.MetricPicker::class, AppDestination.MetricPicker.serializer())
-            subclass(AppDestination.ConfirmDelete::class, AppDestination.ConfirmDelete.serializer())
+    private suspend fun persistInitialSnapshotCleanupIfPending() {
+        if (initialSnapshotCleanupPending) {
+            // The obsolete clear and first v3 write are one navigator-owned operation. This
+            // prevents a late composition effect from erasing the newly persisted route.
+            snapshotStore.clear()
+            initialSnapshotCleanupPending = false
         }
     }
 }

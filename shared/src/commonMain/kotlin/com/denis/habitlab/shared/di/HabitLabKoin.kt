@@ -3,6 +3,7 @@ package com.denis.habitlab.shared.di
 import com.denis.habitlab.shared.core.platform.PlatformDescriptor
 import com.denis.habitlab.shared.data.local.DatabaseReadiness
 import com.denis.habitlab.shared.data.local.DatabaseReadinessState
+import com.denis.habitlab.shared.data.local.DebugAutomationFixtureLocalDataSource
 import com.denis.habitlab.shared.data.local.DebugDatabaseBootstrap
 import com.denis.habitlab.shared.data.local.DebugExperimentDatabaseControl
 import com.denis.habitlab.shared.data.local.HabitLabDatabase
@@ -40,12 +41,14 @@ import com.denis.habitlab.shared.domain.interactor.OnboardingProtocolIdSource
 import com.denis.habitlab.shared.domain.interactor.GetCurrentLocalDate
 import com.denis.habitlab.shared.domain.interactor.ObserveThemePreference
 import com.denis.habitlab.shared.domain.interactor.SetThemePreference
+import com.denis.habitlab.shared.domain.interactor.ResolveLaunchGate
 import com.denis.habitlab.shared.domain.observer.DailyCheckInObserver
 import com.denis.habitlab.shared.domain.observer.ExperimentListObserver
 import com.denis.habitlab.shared.domain.observer.ExperimentProjectionObserver
 import com.denis.habitlab.shared.domain.observer.OnboardingStateObserver
 import com.denis.habitlab.shared.domain.observer.OnboardingCatalogObserver
 import com.denis.habitlab.shared.domain.observer.ActiveOnboardingProtocolObserver
+import com.denis.habitlab.shared.domain.observer.LaunchGateSnapshotObserver
 import com.denis.habitlab.shared.domain.repository.AppMetadataRepository
 import com.denis.habitlab.shared.domain.repository.ExperimentRepository
 import com.denis.habitlab.shared.domain.repository.AppPreferenceRepository
@@ -65,6 +68,9 @@ import com.denis.habitlab.shared.presentation.settings.SettingsUiMapper
 import com.denis.habitlab.shared.presentation.settings.SettingsViewModel
 import com.denis.habitlab.shared.presentation.metricpicker.MetricPickerViewModel
 import com.denis.habitlab.shared.presentation.confirmdelete.ConfirmDeleteViewModel
+import com.denis.habitlab.shared.presentation.launchgate.LaunchGateViewModel
+import com.denis.habitlab.shared.presentation.onboardingcheckpoint.OnboardingCheckpointUiMapper
+import com.denis.habitlab.shared.presentation.onboardingcheckpoint.OnboardingCheckpointViewModel
 import com.denis.habitlab.shared.presentation.navigation.ExperimentEditorEntryArguments
 import com.denis.habitlab.shared.presentation.navigation.MetricPickerEntryArguments
 import com.denis.habitlab.shared.presentation.navigation.confirmation.NavigationConfirmationDialogViewModel
@@ -161,10 +167,11 @@ private fun habitLabModule(
     single<ExperimentProjectionObserver> { get<RoomExperimentObservers>() }
     single<ExperimentListObserver> { get<RoomExperimentObservers>() }
     single<DailyCheckInObserver> { get<RoomExperimentObservers>() }
-    single { RoomOnboardingObservers(localDataSource = get()) }
+    single { RoomOnboardingObservers(localDataSource = get(), databaseReadiness = get()) }
     single<OnboardingStateObserver> { get<RoomOnboardingObservers>() }
     single<OnboardingCatalogObserver> { get<RoomOnboardingObservers>() }
     single<ActiveOnboardingProtocolObserver> { get<RoomOnboardingObservers>() }
+    single<LaunchGateSnapshotObserver> { get<RoomOnboardingObservers>() }
     single<ExperimentIdSource> { RandomDraftExperimentIdSource() }
     single<OnboardingProtocolIdSource> { RandomOnboardingProtocolIdSource() }
     single<RecordedAtSource> { SystemRecordedAtSource() }
@@ -182,15 +189,18 @@ private fun habitLabModule(
     single { SaveOnboardingSetupDraftReference(repository = get()) }
     single { CreateInitialActiveOnboardingProtocol(repository = get(), idSource = get()) }
     single { AppendOnboardingProtocolConfiguration(repository = get()) }
+    single { ResolveLaunchGate() }
     single { GetCurrentLocalDate(source = get()) }
     single<AppPreferenceRepository> { RuntimeAppPreferenceRepository() }
     single { ObserveThemePreference(repository = get()) }
     single { SetThemePreference(repository = get()) }
     if (isDebugBuild) {
+        single { DebugAutomationFixtureLocalDataSource(database = get()) }
         single {
             val databaseReadiness: DatabaseReadiness = get()
             DebugExperimentDatabaseControl(
                 localDataSource = get(),
+                automationFixtureDataSource = get(),
                 onSuccessfulReset = databaseReadiness::markReady,
             )
         }
@@ -211,6 +221,11 @@ private fun habitLabModule(
         )
     }
     factory { ExperimentListUiMapper() }
+    factory { LaunchGateViewModel(snapshotObserver = get(), resolveLaunchGate = get()) }
+    factory { OnboardingCheckpointUiMapper() }
+    factory { parameters ->
+        OnboardingCheckpointViewModel(step = parameters.get(), uiMapper = get())
+    }
     factory { ExperimentListViewModel(experimentListObserver = get(), uiMapper = get()) }
     factory { ExperimentDetailsUiMapper() }
     factory { parameters ->

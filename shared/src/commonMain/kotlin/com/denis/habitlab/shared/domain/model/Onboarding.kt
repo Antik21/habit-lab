@@ -1,6 +1,7 @@
 package com.denis.habitlab.shared.domain.model
 
 import kotlin.jvm.JvmInline
+import kotlinx.serialization.Serializable
 
 /** Persisted confirmation is intentionally only boolean-like; it never stores date of birth. */
 enum class EligibilityConfirmation {
@@ -17,6 +18,7 @@ sealed interface OnboardingProgress {
 }
 
 /** Stable flow checkpoints; these are domain checkpoints, not navigation routes or UI state. */
+@Serializable
 enum class OnboardingStep {
     WELCOME,
     OUTCOME,

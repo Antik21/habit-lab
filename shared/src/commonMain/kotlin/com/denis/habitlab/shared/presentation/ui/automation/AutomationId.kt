@@ -23,6 +23,19 @@ enum class AutomationId(
     GalleryLoadingState("habitlab.gallery.state.loading"),
     GalleryEmptyState("habitlab.gallery.state.empty"),
     GalleryErrorState("habitlab.gallery.state.error"),
+    LaunchGateScreenRoot("habitlab.launch-gate.screen.root"),
+    LaunchGateLoadingState("habitlab.launch-gate.state.loading"),
+    LaunchGateInvalidState("habitlab.launch-gate.state.invalid"),
+    LaunchGateFailedState("habitlab.launch-gate.state.failed"),
+    LaunchGateRetry("habitlab.launch-gate.action.retry"),
+    OnboardingWelcomeScreenRoot("habitlab.onboarding.welcome.screen.root"),
+    OnboardingOutcomeScreenRoot("habitlab.onboarding.outcome.screen.root"),
+    OnboardingContextScreenRoot("habitlab.onboarding.context.screen.root"),
+    OnboardingProtocolsScreenRoot("habitlab.onboarding.protocols.screen.root"),
+    OnboardingHealthExplanationScreenRoot("habitlab.onboarding.health-explanation.screen.root"),
+    OnboardingStatusCoverageScreenRoot("habitlab.onboarding.status-coverage.screen.root"),
+    OnboardingSetupScreenRoot("habitlab.onboarding.setup.screen.root"),
+    OnboardingCheckpointBack("habitlab.onboarding.checkpoint.action.back"),
     NavigationExperimentScreenRoot("habitlab.navigation.experiment.screen.root"),
     NavigationExperimentToolbarBack("habitlab.navigation.experiment.toolbar.back"),
     NavigationExperimentOpenDialog("habitlab.navigation.experiment.action.open-dialog"),
@@ -105,6 +118,8 @@ enum class AutomationId(
 
         private val SUPPORTED_NAMESPACES = listOf(
             "habitlab.gallery.",
+            "habitlab.launch-gate.",
+            "habitlab.onboarding.",
             "habitlab.navigation.",
             "habitlab.experiment-list.",
             "habitlab.experiment-details.",
@@ -115,6 +130,15 @@ enum class AutomationId(
             "habitlab.confirm-delete.",
         )
     }
+}
+
+/** Stable selectors for the invisible launch decision and its safe recovery states. */
+object LaunchGateAutomationIds {
+    val screenRoot = AutomationId.LaunchGateScreenRoot
+    val loading = AutomationId.LaunchGateLoadingState
+    val invalid = AutomationId.LaunchGateInvalidState
+    val failed = AutomationId.LaunchGateFailedState
+    val retry = AutomationId.LaunchGateRetry
 }
 
 /** Selectors for DEN-12's real Experiment List root. */

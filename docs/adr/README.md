@@ -25,6 +25,7 @@ Copy [the template](template.md), add it to the index below, and link the affect
 ## Index
 
 - [ADR 0001: Temporary iOS leading-edge back adapter](0001-navigation3-ios-edge-adapter.md) — Accepted
-- [ADR 0002: Common route-only navigation restoration](0002-navigation3-ios-restoration-runtime.md) — Accepted
+- [ADR 0002: Common route-only navigation restoration](0002-navigation3-ios-restoration-runtime.md) — Superseded by ADR 0005
 - [ADR 0003: Maestro cross-platform UI automation](0003-maestro-cross-platform-ui-automation.md) — Accepted
 - [ADR 0004: Onboarding v2 offline storage](0004-onboarding-v2-offline-storage.md) — Accepted
+- [ADR 0005: Launch-gated route restoration](0005-launch-gate-route-restoration.md) — Accepted
