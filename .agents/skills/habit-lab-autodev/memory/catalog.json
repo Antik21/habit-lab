@@ -22,16 +22,16 @@
     {
       "id": "nav.experiment-list.screen",
       "path": "memory/nav/experiment-list/screen.md",
-      "tags": ["navigation", "screen", "experiment", "list", "gallery"],
+      "tags": ["navigation", "screen", "experiment", "list", "today"],
       "kind": "nav-screen",
       "wordBudget": 500,
-      "routeKey": "Gallery",
-      "destination": "AppDestination.Gallery"
+      "routeKey": "Today",
+      "destination": "AppDestination.Today"
     },
     {
       "id": "nav.experiment-list.logic",
       "path": "memory/nav/experiment-list/logic.md",
-      "tags": ["navigation", "logic", "experiment", "list", "gallery"],
+      "tags": ["navigation", "logic", "experiment", "list", "today"],
       "kind": "supporting-logic",
       "wordBudget": 180,
       "routeKey": null,
