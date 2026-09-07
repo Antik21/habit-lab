@@ -9,7 +9,7 @@ Entries install saved-state and ViewModel-store decorators, then resolve entry-s
 
 ## Back, links, and restoration
 
-The common host handles Android system back and iOS adapter requests. Native hosts only forward events. `Welcome` and `Today` are non-poppable roots; a canonical onboarding path pops to its preceding reachable checkpoint. External URLs accept exactly `habitlab://experiment/daily-movement` and `habitlab://experiment/sleep-routine`; the host queues them through LaunchGate and honors a valid experiment link only after Today eligibility. Invalid input safely resets to the current canonical root. An event is consumed by its exact ID after handling.
+The common host handles Android system back and iOS adapter requests. Native hosts only forward events. `Welcome` and `Today` are non-poppable roots; a canonical onboarding path pops to its preceding reachable checkpoint. After every incomplete gate decision, an app-owned monitor observes the atomic snapshot and moves to Today only after it proves durable completion; it remains alive if SETUP is popped. External URLs accept exactly `habitlab://experiment/daily-movement` and `habitlab://experiment/sleep-routine`; links received before Today eligibility, including during LaunchGate and incomplete onboarding, stay in FIFO custody. The serialized Today admission persists the initial Today route and replays that FIFO exactly once before later arrivals can navigate. Invalid input safely resets to the current canonical root. An event is consumed by its exact ID after handling.
 
 <!-- fact-owner: route-restoration -->
 <!-- canonical-signature: route-restoration-v1 -->

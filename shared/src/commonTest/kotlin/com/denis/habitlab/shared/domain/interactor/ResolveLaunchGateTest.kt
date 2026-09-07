@@ -31,7 +31,7 @@ class ResolveLaunchGateTest {
 
     @Test
     fun freshAndEveryReachableInProgressCheckpointResolveToTheCanonicalCheckpoint() {
-        assertEquals(LaunchGateDecision.Welcome, resolver(snapshot(state())) )
+        assertEquals(LaunchGateDecision.Welcome, resolver(snapshot(state())))
 
         listOf(
             OnboardingStep.WELCOME to OnboardingSelections(),

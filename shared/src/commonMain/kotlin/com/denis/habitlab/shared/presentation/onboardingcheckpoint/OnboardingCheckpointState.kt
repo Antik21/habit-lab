@@ -23,4 +23,7 @@ sealed interface SideEffect
 
 sealed interface NavigationEffect : SideEffect {
     data object Back : NavigationEffect
+
+    /** Posted by the app-owned SETUP monitor after an exact durable Today-ready snapshot. */
+    data object OnboardingCompleted : NavigationEffect
 }

@@ -28,6 +28,7 @@ import com.denis.habitlab.shared.presentation.metricpicker.MetricPickerViewModel
 import com.denis.habitlab.shared.presentation.launchgate.LaunchGateScreen
 import com.denis.habitlab.shared.presentation.launchgate.LaunchGateViewModel
 import com.denis.habitlab.shared.presentation.launchgate.LaunchGateDecision
+import com.denis.habitlab.shared.presentation.onboardingcheckpoint.OnboardingCompletionMonitor
 import com.denis.habitlab.shared.presentation.onboardingcheckpoint.OnboardingCheckpointScreen
 import com.denis.habitlab.shared.presentation.onboardingcheckpoint.OnboardingCheckpointViewModel
 import com.denis.habitlab.shared.presentation.navigation.DeleteDialogResult
@@ -58,12 +59,16 @@ internal fun Navigation3AppHost(
 ) {
     val snapshotStore = rememberNavigationRouteSnapshotStore()
     val restored = remember(snapshotStore) { NavigationRouteSnapshotCodec.restore(snapshotStore.read()) }
+    // This monitor starts after any incomplete LaunchGate decision. It is app-owned rather than
+    // entry-owned so a Back removal cannot cancel durable completion delivery.
+    val onboardingCompletionMonitor: OnboardingCompletionMonitor = appCompositionDependency()
+    val onboardingCompletionRequests = remember { OnboardingCompletionObservationRequests() }
     // Do not use rememberNavBackStack: its saveable restoration could bypass this cold LaunchGate.
     // The v3 custom snapshot remains only a post-decision candidate.
     val backStack = remember { NavBackStack<NavKey>(*restored.routes.toTypedArray()) }
     var pendingResult by remember { mutableStateOf<DialogResultDelivery?>(null) }
     var confirmDeleteDismissalLock by remember { mutableStateOf(ConfirmDeleteDismissalLock.UNLOCKED) }
-    val navigator = remember(backStack, snapshotStore, restored.shouldClearStoredSnapshot) {
+    val navigator = remember(backStack, snapshotStore, restored.shouldClearStoredSnapshot, onboardingCompletionRequests) {
         AppNavigator(
             backStack = backStack,
             snapshotStore = snapshotStore,
@@ -74,6 +79,7 @@ internal fun Navigation3AppHost(
                 pendingResult = null
                 confirmDeleteDismissalLock = ConfirmDeleteDismissalLock.UNLOCKED
             },
+            onIncompleteOnboardingObservationRequested = onboardingCompletionRequests::request,
         )
     }
     LaunchedEffect(navigationEvents, navigator) {
@@ -84,6 +90,16 @@ internal fun Navigation3AppHost(
     }
     LaunchedEffect(navigationEvents, navigator) {
         navigationEvents.backRequests.collect { withContext(NonCancellable) { navigator.onBack() } }
+    }
+    LaunchedEffect(navigator, onboardingCompletionMonitor, onboardingCompletionRequests) {
+        onboardingCompletionRequests.requests.collect {
+            onboardingCompletionMonitor.observeCompletion().collect { completion ->
+                navigator.handleOnboardingEffect(
+                    AppDestination.OnboardingCheckpoint(OnboardingStep.SETUP),
+                    completion,
+                )
+            }
+        }
     }
 
     val decorators = listOf(
@@ -309,6 +325,95 @@ private sealed interface DialogResult {
 
 private data class DialogResultDelivery(val id: Long, val caller: AppDestination, val result: DialogResult)
 
+/** App-lifetime trigger for the post-gate incomplete-onboarding completion monitor. */
+private class OnboardingCompletionObservationRequests {
+    private val requestsChannel = Channel<Unit>(Channel.CONFLATED)
+    val requests: Flow<Unit> = requestsChannel.receiveAsFlow()
+
+    fun request() {
+        check(requestsChannel.trySend(Unit).isSuccess) { "Setup completion request channel is unavailable" }
+    }
+}
+
+/**
+ * Serializes external URL delivery with the durable transition that first admits Today.
+ *
+ * The command mutex deliberately wraps the initial Today persistence and every replayed URL, so
+ * a URL arriving while that persistence suspends cannot overtake an older deferred URL. The only
+ * nested lock acquired by its callbacks is [AppNavigator.snapshotPersistenceMutex]; no snapshot
+ * callback acquires this mutex, which keeps the lock order one-way.
+ */
+internal class DeferredExternalNavigationCoordinator {
+    private val commandMutex = Mutex()
+    private val deferredEvents = mutableListOf<ExternalNavigationEvent>()
+    private var todayAdmission = TodayAdmission.INELIGIBLE
+
+    suspend fun deferOrProcess(
+        event: ExternalNavigationEvent,
+        processTodayEvent: suspend (ExternalNavigationEvent) -> Unit,
+    ) = commandMutex.withLock {
+        if (todayAdmission != TodayAdmission.ELIGIBLE) {
+            deferredEvents += event
+        } else {
+            processTodayEvent(event)
+        }
+    }
+
+    /**
+     * Makes Today eligible only after [prepareToday] has durably persisted its initial route, then
+     * replays all older deferred URLs before admitting any later arrival.
+     */
+    suspend fun admitToday(
+        prepareToday: suspend () -> Unit,
+        replayDeferredEvent: suspend (ExternalNavigationEvent) -> Unit,
+    ) = commandMutex.withLock {
+        if (todayAdmission == TodayAdmission.INELIGIBLE) {
+            todayAdmission = TodayAdmission.TRANSITIONING
+            try {
+                prepareToday()
+                while (deferredEvents.isNotEmpty()) {
+                    val event = deferredEvents.first()
+                    replayDeferredEvent(event)
+                    deferredEvents.removeAt(0)
+                }
+                todayAdmission = TodayAdmission.ELIGIBLE
+            } catch (error: Throwable) {
+                // Retain custody of every not-yet-replayed event for a retryable admission.
+                todayAdmission = TodayAdmission.INELIGIBLE
+                throw error
+            }
+        }
+    }
+
+    private enum class TodayAdmission {
+        INELIGIBLE,
+        TRANSITIONING,
+        ELIGIBLE,
+    }
+}
+
+/** Applies entry-scoped Back but admits durable SETUP completion even after that entry is popped. */
+internal class OnboardingNavigationEffectHandler(
+    private val isOriginCurrent: (AppDestination) -> Boolean,
+    private val onBack: suspend () -> Unit,
+    private val onSetupCompleted: suspend () -> Unit,
+) {
+    suspend fun handle(
+        origin: AppDestination,
+        effect: com.denis.habitlab.shared.presentation.onboardingcheckpoint.NavigationEffect,
+    ) {
+        when (effect) {
+            com.denis.habitlab.shared.presentation.onboardingcheckpoint.NavigationEffect.Back -> {
+                if (isOriginCurrent(origin)) onBack()
+            }
+            com.denis.habitlab.shared.presentation.onboardingcheckpoint.NavigationEffect.OnboardingCompleted -> {
+                val setup = origin as? AppDestination.OnboardingCheckpoint
+                if (setup?.step == OnboardingStep.SETUP) onSetupCompleted()
+            }
+        }
+    }
+}
+
 private class AppNavigator(
     private val backStack: NavBackStack<NavKey>,
     private val snapshotStore: NavigationRouteSnapshotStore,
@@ -316,14 +421,19 @@ private class AppNavigator(
     private val onDialogResult: (DialogResultDelivery) -> Unit,
     private val confirmDeleteDismissalLock: () -> ConfirmDeleteDismissalLock,
     private val onNavigationStarted: () -> Unit,
+    private val onIncompleteOnboardingObservationRequested: () -> Unit,
 ) {
     private var nextResultId = 0L
     private var launchResolved = false
-    private var todayEligible = false
     private var canonicalRoot: AppDestination = AppDestination.LaunchGate
     private var initialSnapshotCleanupPending = initialSnapshotCleanupPending
-    private val deferredExternalNavigation = mutableListOf<ExternalNavigationEvent>()
+    private val deferredExternalNavigation = DeferredExternalNavigationCoordinator()
     private val snapshotPersistenceMutex = Mutex()
+    private val onboardingNavigationEffects = OnboardingNavigationEffectHandler(
+        isOriginCurrent = { backStack.lastOrNull() == it },
+        onBack = ::onBack,
+        onSetupCompleted = ::transitionCompletedOnboardingToToday,
+    )
 
     suspend fun handleListEffect(effect: com.denis.habitlab.shared.presentation.experimentlist.NavigationEffect) {
         if (backStack.lastOrNull() != AppDestination.Today) return
@@ -396,20 +506,14 @@ private class AppNavigator(
     suspend fun handleOnboardingEffect(
         origin: AppDestination,
         effect: com.denis.habitlab.shared.presentation.onboardingcheckpoint.NavigationEffect,
-    ) {
-        if (backStack.lastOrNull() == origin && effect == com.denis.habitlab.shared.presentation.onboardingcheckpoint.NavigationEffect.Back) {
-            onBack()
-        }
-    }
+    ) = onboardingNavigationEffects.handle(origin, effect)
 
     suspend fun handleLaunchGateEffect(
         decision: LaunchGateDecision,
         restoredCandidate: List<AppDestination>?,
     ) {
         if (backStack.lastOrNull() != AppDestination.LaunchGate || launchResolved) return
-        onNavigationStarted()
         launchResolved = true
-        todayEligible = decision == LaunchGateDecision.Today
         val resolvedRoutes = when (decision) {
             LaunchGateDecision.Welcome -> listOf(AppDestination.Welcome)
             is LaunchGateDecision.ResumeOnboarding -> onboardingRoutes(decision.checkpoint)
@@ -417,14 +521,22 @@ private class AppNavigator(
                 ?.takeIf { NavigationRouteSnapshotCodec.isValidCompleteRoute(it) && it.firstOrNull() == AppDestination.Today }
                 ?: listOf(AppDestination.Today)
         }
-        canonicalRoot = resolvedRoutes.first()
-        replaceWith(resolvedRoutes)
-        persist()
-
-        val queued = deferredExternalNavigation.toList()
-        deferredExternalNavigation.clear()
-        if (todayEligible) {
-            queued.forEach { event -> handleExternalNavigationAfterGate(event) }
+        if (decision == LaunchGateDecision.Today) {
+            deferredExternalNavigation.admitToday(
+                prepareToday = {
+                    onNavigationStarted()
+                    canonicalRoot = resolvedRoutes.first()
+                    replaceWith(resolvedRoutes)
+                    persist()
+                },
+                replayDeferredEvent = ::handleExternalNavigationAfterTodayAdmission,
+            )
+        } else {
+            onNavigationStarted()
+            canonicalRoot = resolvedRoutes.first()
+            replaceWith(resolvedRoutes)
+            persist()
+            onIncompleteOnboardingObservationRequested()
         }
     }
 
@@ -476,23 +588,26 @@ private class AppNavigator(
         }
     }
 
-    /** Native delivery is queued until the durable launch decision has completed. */
+    /** Native delivery stays in FIFO custody until the Today admission handoff has completed. */
     suspend fun deferExternalNavigation(event: ExternalNavigationEvent) {
-        if (!launchResolved) {
-            deferredExternalNavigation += event
-        } else {
-            handleExternalNavigationAfterGate(event)
-        }
+        deferredExternalNavigation.deferOrProcess(event, ::handleExternalNavigationAfterTodayAdmission)
     }
 
-    private suspend fun handleExternalNavigationAfterGate(event: ExternalNavigationEvent) {
+    /** SETUP observed durable completion; serialize Today persistence before replaying deferred links. */
+    private suspend fun transitionCompletedOnboardingToToday() {
+        deferredExternalNavigation.admitToday(
+            prepareToday = {
+                onNavigationStarted()
+                canonicalRoot = AppDestination.Today
+                replaceWith(listOf(AppDestination.Today))
+                persist()
+            },
+            replayDeferredEvent = ::handleExternalNavigationAfterTodayAdmission,
+        )
+    }
+
+    private suspend fun handleExternalNavigationAfterTodayAdmission(event: ExternalNavigationEvent) {
         onNavigationStarted()
-        if (!todayEligible) {
-            // Product links are never admitted while onboarding is incomplete.
-            replaceWithRoot()
-            persist()
-            return
-        }
         replaceWith(listOf(AppDestination.Today))
         HabitLabDeepLink.parse(event.rawUrl)?.let(backStack::add)
         persist()

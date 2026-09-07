@@ -69,6 +69,7 @@ import com.denis.habitlab.shared.presentation.settings.SettingsViewModel
 import com.denis.habitlab.shared.presentation.metricpicker.MetricPickerViewModel
 import com.denis.habitlab.shared.presentation.confirmdelete.ConfirmDeleteViewModel
 import com.denis.habitlab.shared.presentation.launchgate.LaunchGateViewModel
+import com.denis.habitlab.shared.presentation.onboardingcheckpoint.OnboardingCompletionMonitor
 import com.denis.habitlab.shared.presentation.onboardingcheckpoint.OnboardingCheckpointUiMapper
 import com.denis.habitlab.shared.presentation.onboardingcheckpoint.OnboardingCheckpointViewModel
 import com.denis.habitlab.shared.presentation.navigation.ExperimentEditorEntryArguments
@@ -222,9 +223,13 @@ private fun habitLabModule(
     }
     factory { ExperimentListUiMapper() }
     factory { LaunchGateViewModel(snapshotObserver = get(), resolveLaunchGate = get()) }
+    factory { OnboardingCompletionMonitor(snapshotObserver = get(), resolveLaunchGate = get()) }
     factory { OnboardingCheckpointUiMapper() }
     factory { parameters ->
-        OnboardingCheckpointViewModel(step = parameters.get(), uiMapper = get())
+        OnboardingCheckpointViewModel(
+            step = parameters.get(),
+            uiMapper = get(),
+        )
     }
     factory { ExperimentListViewModel(experimentListObserver = get(), uiMapper = get()) }
     factory { ExperimentDetailsUiMapper() }

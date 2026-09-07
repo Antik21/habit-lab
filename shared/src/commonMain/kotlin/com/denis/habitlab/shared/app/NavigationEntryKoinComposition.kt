@@ -2,6 +2,7 @@ package com.denis.habitlab.shared.app
 
 import androidx.compose.runtime.Composable
 import androidx.lifecycle.ViewModel
+import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
 
@@ -18,3 +19,7 @@ internal inline fun <reified ViewModelType : ViewModel> navigationEntryViewModel
     key = key,
     parameters = { parametersOf(*parameters) },
 )
+
+/** Resolves an app-lifetime non-screen dependency without leaking Koin into navigation owners. */
+@Composable
+internal inline fun <reified DependencyType : Any> appCompositionDependency(): DependencyType = koinInject()
